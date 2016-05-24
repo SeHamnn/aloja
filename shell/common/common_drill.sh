@@ -88,4 +88,4 @@ initialize_drill_vars() {
 # $1 bench name
 save_drill() {
   logger "WARNING: missing to implement a proper save_drill()"
-  save_hive
+  save_drill
