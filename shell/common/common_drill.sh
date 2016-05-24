@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 #DRILL SPECIFIC FUNCTIONS
 source_file "$ALOJA_REPO_PATH/shell/common/common_hadoop.sh"
 set_hadoop_requires
