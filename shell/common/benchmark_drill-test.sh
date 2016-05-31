@@ -13,7 +13,7 @@ benchmark_suite_config() {
   start_hadoop
 
   initialize_drill_vars
-#  prepare_hive_config "$HIVE_SETTINGS_FILE" "$HIVE_SETTINGS_FILE_PATH"
+  prepare_drill_config "$DRILL_SETTINGS_FILE" "$DRILL_SETTINGS_FILE_PATH"
 }
 
 benchmark_suite_cleanup() {
@@ -24,5 +24,5 @@ benchmark_drill-test() {
   local bench_name="${FUNCNAME[0]##*benchmark_}"
   logger "INFO: Running $bench_name"
 
-  execute_drill "$bench_name" "--version" ""
+  execute_drill "$bench_name" '-e "SELECT from_unixtime(unix_timestamp());"' "time"
 }

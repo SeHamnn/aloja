@@ -13,8 +13,8 @@ set_drill_requires() {
 
   BENCH_REQUIRED_FILES["$DRILL_VERSION"]="http://apache.mesi.com.ar/drill/drill-1.6.0/$DRILL_VERSION.tar.gz"
 
-  #also set the config here
-  #BENCH_CONFIG_FOLDERS="$BENCH_CONFIG_FOLDERS drill_conf_template"
+  also set the config here
+  BENCH_CONFIG_FOLDERS="$BENCH_CONFIG_FOLDERS drill_1.6_conf_template"
 }
 
 # Helper to print a line with requiered exports
@@ -38,7 +38,7 @@ get_drill_cmd() {
 
   drill_exports="$(get_drill_exports)"
 
-  drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-embedded "
+  drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-localhost "
 
   echo -e "$drill_cmd"
 }
@@ -76,12 +76,16 @@ execute_drill(){
 }
 
 initialize_drill_vars() {
+  BENCH_CONFIG_FOLDERS="$BENCH_CONFIG_FOLDERS drill_1.6_conf_template"
+
   if [ "$clusterType" == "PaaS" ]; then
     DRILL_HOME="/usr/bin/drill"
     DRILL_CONF_DIR="/etc/drill/conf"
   else
     DRILL_HOME="$(get_local_apps_path)/${DRILL_VERSION}"
-    DRILL_CONF_DIR="$(get_local_apps_path)/${DRILL_VERSION}/conf"
+    DRILL_CONF_DIR="$HDD/drill_conf"
+        # Only set a default hive.settings when not in PaaS
+    [ ! "$DRILL_SETTINGS_FILE" ] && DRILL_SETTINGS_FILE="$HDD/drill_conf/drill.settings"
   fi
 }
 

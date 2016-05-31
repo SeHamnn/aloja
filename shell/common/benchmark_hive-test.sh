@@ -24,7 +24,7 @@ benchmark_hive-now() {
   local bench_name="${FUNCNAME[0]##*benchmark_}"
   logger "INFO: Running $bench_name"
 
-  execute_hive "$bench_name" '-e "SELECT from_unixtime(unix_timestamp());"' "time"
+  execute_hive "$bench_name" '-e "SELECT * FROM sys.drillbits;"' "time"
 }
 
 #benchmark_validate_hive-now() {
