@@ -13,7 +13,7 @@ set_drill_requires() {
 
   BENCH_REQUIRED_FILES["$DRILL_VERSION"]="http://apache.mesi.com.ar/drill/drill-1.6.0/$DRILL_VERSION.tar.gz"
 
-  also set the config here
+  #also set the config here
   BENCH_CONFIG_FOLDERS="$BENCH_CONFIG_FOLDERS drill_1.6_conf_template"
 }
 
@@ -93,3 +93,4 @@ initialize_drill_vars() {
 save_drill() {
   logger "WARNING: missing to implement a proper save_drill()"
   save_drill
+  }
