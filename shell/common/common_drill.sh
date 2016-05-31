@@ -92,5 +92,5 @@ initialize_drill_vars() {
 # $1 bench name
 save_drill() {
   logger "WARNING: missing to implement a proper save_drill()"
-  save_drill
+  save_hadoop "$bench_name"
   }
