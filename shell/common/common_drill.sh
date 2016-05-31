@@ -38,8 +38,8 @@ get_drill_cmd() {
 
   drill_exports="$(get_drill_exports)"
 
-  drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-localhost "
-
+  #drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-localhost "
+  drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drillbit.sh "
   echo -e "$drill_cmd"
 }
 
