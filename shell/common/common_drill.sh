@@ -15,6 +15,7 @@ set_drill_requires() {
 
   #also set the config here
   BENCH_CONFIG_FOLDERS="$BENCH_CONFIG_FOLDERS drill_1.6_conf_template"
+
 }
 
 # Helper to print a line with requiered exports
@@ -38,8 +39,8 @@ get_drill_cmd() {
 
   drill_exports="$(get_drill_exports)"
 
-  #drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-localhost "
-  drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drillbit.sh "
+  drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-localhost "
+  #drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drillbit.sh "
   echo -e "$drill_cmd"
 }
 
@@ -51,7 +52,7 @@ execute_drill(){
   local bench="$1"
   local cmd="$2"
   local time_exec="$3"
-
+  echo -e "$(get_local_apps_path)/$DRILL_VERSION/bin/drillbit.sh start"
   local drill_cmd="$(get_drill_cmd) $cmd"
 
   # Start metrics monitor (if needed)
