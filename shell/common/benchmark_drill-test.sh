@@ -13,7 +13,7 @@ benchmark_suite_config() {
   start_hadoop
 
   initialize_drill_vars
-  prepare_drill_config "$DRILL_SETTINGS_FILE" "$DRILL_SETTINGS_FILE_PATH"
+  #prepare_drill_config "$DRILL_SETTINGS_FILE" "$DRILL_SETTINGS_FILE_PATH"
 }
 
 benchmark_suite_cleanup() {

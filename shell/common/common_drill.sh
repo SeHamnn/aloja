@@ -52,7 +52,7 @@ execute_drill(){
   local bench="$1"
   local cmd="$2"
   local time_exec="$3"
-  echo -e "$(get_local_apps_path)/$DRILL_VERSION/bin/drillbit.sh start"
+
   local drill_cmd="$(get_drill_cmd) $cmd"
 
   # Start metrics monitor (if needed)
@@ -63,6 +63,9 @@ execute_drill(){
   fi
 
   logger "DEBUG: DRILL command:\n$drill_cmd"
+
+  sh $DRILL_HOME/bin/drillbit.sh start
+  sh $DRILL_HOME/bin/drillbit.sh status
 
   # Run the command and time it
   time_cmd_master "$drill_cmd" "$time_exec"
