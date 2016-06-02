@@ -39,6 +39,7 @@ get_drill_cmd() {
 
   drill_exports="$(get_drill_exports)"
 
+
   drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-localhost "
   #drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drillbit.sh "
   echo -e "$drill_cmd"
@@ -64,9 +65,11 @@ execute_drill(){
 
   logger "DEBUG: DRILL command:\n$drill_cmd"
 
-  sh $DRILL_HOME/bin/drillbit.sh start
-  sh $DRILL_HOME/bin/drillbit.sh status
-
+  export JAVA_HOME="$(get_java_home)"
+  echo -e $DRILL_CONF_DIR
+  bash $DRILL_HOME/bin/drillbit.sh restart
+  bash $DRILL_HOME/bin/drillbit.sh status
+  echo 'done'
   # Run the command and time it
   time_cmd_master "$drill_cmd" "$time_exec"
 
