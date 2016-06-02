@@ -26,7 +26,7 @@ get_drill_exports() {
 export DRILL_VERSION='$DRILL_VERSION';
 export DRILL_HOME='$(get_local_apps_path)/${DRILL_VERSION}';
 export DRILL_CONF_DIR=$(get_local_apps_path)/${DRILL_VERSION}/conf;
-export DRILL_LOG_DIR=$(get_local_bench_path)/drill_logs;
+export DRILL_LOG_DIR=$(get_local_bench_path)/${DRILL_VERSION}/bin;
 "
 
   echo -e "$to_export\n"
