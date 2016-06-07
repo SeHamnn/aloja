@@ -4,11 +4,14 @@ source_file "$ALOJA_REPO_PATH/shell/common/common_hadoop.sh"
 set_hadoop_requires
 
 
-#source_file "$ALOJA_REPO_PATH/shell/common/common_zookeeper.sh"
-#set_zookeeper_requires
+source_file "$ALOJA_REPO_PATH/shell/common/common_zookeeper.sh"
+set_zookeeper_requires
 
 # Sets the required files to download/copy
 set_drill_requires() {
+
+
+
   [ ! "$DRILL_VERSION" ] && die "No DRILL_VERSION specified"
 
   BENCH_REQUIRED_FILES["$DRILL_VERSION"]="http://apache.mesi.com.ar/drill/drill-1.6.0/$DRILL_VERSION.tar.gz"
