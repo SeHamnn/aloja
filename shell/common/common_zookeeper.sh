@@ -60,5 +60,6 @@ start_zookeeper(){
 # $1 bench name
 save_zookeeper() {
   logger "WARNING: missing to implement a proper save_zookeeper()"
+  $(get_local_apps_path)/${ZOOKEEPER_VERSION}/bin/zkServer.sh stop
   save_hadoop "$bench_name"
   }
