@@ -43,8 +43,8 @@ get_drill_cmd() {
   drill_exports="$(get_drill_exports)"
 
 
-  drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-embedded "
-  #drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drillbit.sh "
+  #drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/sqlline -u jdbc:drill:zk:127.0.0.1:2181 "
+  drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-conf "
   echo -e "$drill_cmd"
 }
 
@@ -71,8 +71,8 @@ execute_drill(){
   export JAVA_HOME="$(get_java_home)"
   #echo -e $DRILL_CONF_DIR
   start_zookeeper
-  #bash $DRILL_HOME/bin/drillbit.sh restart
-  #bash $DRILL_HOME/bin/drillbit.sh status
+  bash $DRILL_HOME/bin/drillbit.sh restart
+  bash $DRILL_HOME/bin/drillbit.sh status
   echo 'done'
   #curl -X POST -H "Content-Type: application/json" -d '{"queryType":"SQL", "query": "SELECT * FROM sys.drillbits"}' http://localhost:31010/query.json
 

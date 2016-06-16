@@ -40,10 +40,20 @@ start_zookeeper(){
   export PATH=$PATH:zk_home
   export JAVA_HOME="$(get_java_home)"
 
+
+
   local exports="$(get_zookeeper_exports) $zookeeper_exports"
   logger "DEBUG: zk:\n$exports"
-  $zk_home/bin/zkServer.sh start
-  $zk_home/bin/zkCli.sh -server 127.0.0.1:2181
+
+  cp $(get_base_configs_path)/zookeeper_conf/zoo.cfg $zk_home/conf/zoo.cfg
+  $zk_home/bin/zkServer.sh restart
+  #$zk_home/bin/zkCli.sh -server 127.0.0.1:2181
+  $zk_home/bin/zkServer.sh status
+  #echo stat | nc 127.0.0.1 2181
+  #echo mntr | nc 127.0.0.1 2181
+  #echo isro  | nc 127.0.0.1 2181
+
+
 }
 
 
