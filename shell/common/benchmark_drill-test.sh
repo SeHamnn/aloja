@@ -1,5 +1,5 @@
 # Benchmark to test Hive installation and configurations
-source_file "$ALOJA_REPO_PATH/shell/common/common_drill.sh"
+source_file "$ALOJA_REPO_PATH/shell/common/common_drill_test.sh"
 set_drill_requires
 
 #BENCH_REQUIRED_FILES["tpch-hive"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/tpch-hive.tar.gz"
@@ -13,7 +13,8 @@ benchmark_suite_config() {
   start_hadoop
 
   initialize_drill_vars
-  #prepare_drill_config "$DRILL_SETTINGS_FILE" "$DRILL_SETTINGS_FILE_PATH"
+  prepare_drill_config "$NET" "$DISK" "$BENCH_SUITE"
+  start_drill
 }
 
 benchmark_suite_cleanup() {
@@ -25,5 +26,5 @@ benchmark_drill-test() {
   logger "INFO: Running $bench_name"
 
   execute_drill "$bench_name" '-e "select count(*) from (values(1));"' "time"
-
+  #execute_drill "$bench_name" '-e "use sys;"' "time"
 }

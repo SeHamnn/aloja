@@ -10,8 +10,6 @@ set_zookeeper_requires
 # Sets the required files to download/copy
 set_drill_requires() {
 
-
-
   [ ! "$DRILL_VERSION" ] && die "No DRILL_VERSION specified"
 
   BENCH_REQUIRED_FILES["$DRILL_VERSION"]="http://apache.mesi.com.ar/drill/drill-1.6.0/$DRILL_VERSION.tar.gz"
@@ -108,6 +106,5 @@ initialize_drill_vars() {
 save_drill() {
   logger "WARNING: missing to implement a proper save_drill()"
   save_zookeeper
-  bash $DRILL_HOME/bin/drillbit.sh stop
   save_hadoop "$bench_name"
   }
