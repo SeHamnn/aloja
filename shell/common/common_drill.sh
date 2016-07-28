@@ -97,8 +97,6 @@ initialize_drill_vars() {
   else
     DRILL_HOME="$(get_local_apps_path)/${DRILL_VERSION}"
     DRILL_CONF_DIR="$HDD/drill_conf"
-        # Only set a default hive.settings when not in PaaS
-    [ ! "$DRILL_SETTINGS_FILE" ] && DRILL_SETTINGS_FILE="$HDD/drill_conf/drill.settings"
   fi
 }
 

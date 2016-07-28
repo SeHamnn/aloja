@@ -176,7 +176,8 @@ echo -e \"$slaves\" > $DRILL_CONF_DIR/slaves"
 $export_perl
 /usr/bin/perl -i -pe \"s,##HOST##,$node,g;\" $DRILL_CONF_DIR/drill-override.conf
 /usr/bin/perl -i -pe \"s,##HOST##,$node,g;\" $DRILL_CONF_DIR/drill-env.sh
-/usr/bin/perl -i -pe \"s,##HOST##,$node,g;\" $DRILL_CONF_DIR/logback.xml"
+/usr/bin/perl -i -pe \"s,##HOST##,$node,g;\" $DRILL_CONF_DIR/logback.xml
+/usr/bin/perl -i -pe \"s,##HOST##,$node,g;\" $DRILL_CONF_DIR/core-site.xml"
   done
 
   # Save config
@@ -206,7 +207,7 @@ restart_drill(){
     #just in case stop all first
     stop_drill
 
-    $DSH_MASTER "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh start"
+    $DSH "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh start"
     logger "INFO: Drill ready"
   fi
 }
@@ -222,7 +223,7 @@ stop_drill(){
     else
       logger "INFO: Stop Drill (retry)"
     fi
-    $DSH_MASTER "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh stop"
+    $DSH "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh stop"
 
  fi
 
@@ -251,7 +252,8 @@ execute_drill(){
   export JAVA_HOME="$(get_java_home)"
 
   start_zookeeper
-  sleep 60
+  sleep 120
+  $DSH "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh status"
   #ping -c30 vagrant-99-01:
   # Run the command and time it
   $(get_local_apps_path)/${DRILL_VERSION}/bin/sqlline -u jdbc:drill:zk:vagrant-99-00:2181
@@ -282,6 +284,7 @@ get_drill_cmd() {
 # $1 bench name
 save_drill() {
   logger "WARNING: missing to implement a proper save_drill()"
+  stop_drill
   save_zookeeper
   save_hadoop "$bench_name"
   }
