@@ -45,7 +45,7 @@ start_zookeeper(){
   local exports="$(get_zookeeper_exports) $zookeeper_exports"
   logger "DEBUG: zk:\n$exports"
 
-  cp $(get_base_configs_path)/zookeeper_conf/zoo.cfg $ZOOKEEPER_CONF_DIR/zoo.cfg
+  cp $(get_base_configs_path)/zookeeper_conf/zoo.cfg $zk_home/conf/zoo.cfg
   $zk_home/bin/zkServer.sh restart
   #$zk_home/bin/zkCli.sh -server 127.0.0.1:2181
   #$zk_home/bin/zkServer.sh status

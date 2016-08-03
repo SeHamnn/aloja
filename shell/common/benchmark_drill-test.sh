@@ -25,6 +25,6 @@ benchmark_drill-test() {
   local bench_name="${FUNCNAME[0]##*benchmark_}"
   logger "INFO: Running $bench_name"
 
-  execute_drill "$bench_name" '-e "select count(*) from (values(1));"' "time"
+  execute_drill "$bench_name" '-e "select * from sys.memory;"' "time"
   #execute_drill "$bench_name" '-e "use sys;"' "time"
 }

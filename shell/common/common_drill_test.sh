@@ -98,49 +98,6 @@ initialize_drill_vars() {
 }
 
 
-# Sets the substitution values for the drill config
-get_drill_substitutions() {
-
-  #generate the path for the hadoop config files, including support for multiple volumes
-  HDFS_NDIR="$(get_hadoop_conf_dir "$DISK" "dfs/name" "$PORT_PREFIX")"
-  HDFS_DDIR="$(get_hadoop_conf_dir "$DISK" "dfs/data" "$PORT_PREFIX")"
-
-  IO_MB="$((IO_FACTOR * 10))"
-  MAX_REDS="$MAX_MAPS"
-
-  cat <<EOF
-s,##JAVA_HOME##,$(get_java_home),g;
-s,##HADOOP_HOME##,$BENCH_HADOOP_DIR,g;
-s,##JAVA_XMS##,$JAVA_XMS,g;
-s,##JAVA_XMX##,$JAVA_XMX,g;
-s,##JAVA_AM_XMS##,$JAVA_AM_XMS,g;
-s,##JAVA_AM_XMX##,$JAVA_AM_XMX,g;
-s,##LOG_DIR##,$HDD/hadoop_logs,g;
-s,##REPLICATION##,$REPLICATION,g;
-s,##MASTER##,$master_name,g;
-s,##NAMENODE##,$master_name,g;
-s,##TMP_DIR##,$HDD_TMP,g;
-s,##HDFS_NDIR##,$HDFS_NDIR,g;
-s,##HDFS_DDIR##,$HDFS_DDIR,g;
-s,##MAX_MAPS##,$MAX_MAPS,g;
-s,##MAX_REDS##,$MAX_REDS,g;
-s,##IFACE##,$IFACE,g;
-s,##IO_FACTOR##,$IO_FACTOR,g;
-s,##IO_MB##,$IO_MB,g;
-s,##PORT_PREFIX##,$PORT_PREFIX,g;
-s,##IO_FILE##,$IO_FILE,g;
-s,##BLOCK_SIZE##,$BLOCK_SIZE,g;
-s,##PHYS_MEM##,$PHYS_MEM,g;
-s,##NUM_CORES##,$NUM_CORES,g;
-s,##CONTAINER_MIN_MB##,$CONTAINER_MIN_MB,g;
-s,##CONTAINER_MAX_MB##,$CONTAINER_MAX_MB,g;
-s,##MAPS_MB##,$MAPS_MB,g;
-s,##REDUCES_MB##,$REDUCES_MB,g;
-s,##AM_MB##,$AM_MB,g;
-s,##BENCH_LOCAL_DIR##,$BENCH_LOCAL_DIR,g;
-s,##HDD##,$HDD,g;
-EOF
-}
 
 prepare_drill_config(){
 
@@ -154,39 +111,7 @@ prepare_drill_config(){
   done
  else
   logger "INFO: Preparing drill run specific config"
-  $DSH "mkdir -p $HDD/drill_conf; cp -r $(get_local_configs_path)/$(get_drill_config_folder)/* '$HDD/drill_conf';"
-
-
-  # Get the values
-  subs=$(get_drill_substitutions)
-  slaves="$(get_drill_slaves "$node_names" "$master_name")"
-  $DSH "
-$(get_perl_exports)
-/usr/bin/perl -i -pe \"$subs\" $DRILL_CONF_DIR/drill-override.conf;
-/usr/bin/perl -i -pe \"$subs\" $DRILL_CONF_DIR/*.xml;
-
-echo -e '$master_name' > $DRILL_CONF_DIR/masters;
-echo -e \"$slaves\" > $DRILL_CONF_DIR/slaves"
-
-
-  # TODO this part need to be improved, it needs the node for multiple hostnames in a machine (eg. when IB)
-  logger "INFO: Replacing per host config"
-  for node in $node_names ; do
-    ssh "$node" "
-$export_perl
-/usr/bin/perl -i -pe \"s,##HOST##,$node,g;\" $DRILL_CONF_DIR/drill-override.conf
-/usr/bin/perl -i -pe \"s,##HOST##,$node,g;\" $DRILL_CONF_DIR/drill-env.sh
-/usr/bin/perl -i -pe \"s,##HOST##,$node,g;\" $DRILL_CONF_DIR/logback.xml
-/usr/bin/perl -i -pe \"s,##HOST##,$node,g;\" $DRILL_CONF_DIR/core-site.xml"
-  done
-
-  # Save config
-  logger "INFO: Saving bench spefic config to job folder"
-  for node in $node_names ; do
-    ssh "$node" "
-mkdir -p $JOB_PATH/conf_$node;
-cp $DRILL_CONF_DIR/* $JOB_PATH/conf_$node/" &
-  done
+  $DSH "mkdir -p $HDD/drill_conf; cp -r $(get_local_configs_path)/$(get_drill_config_folder)/* $(get_local_apps_path)/${DRILL_VERSION}/conf;"
 
   # Set correct permissions for instrumentation's sniffer
   [ "$INSTRUMENTATION" == "1" ] && instrumentation_set_perms
@@ -253,10 +178,12 @@ execute_drill(){
 
   start_zookeeper
   sleep 120
+  #$DSH "cat $BENCH_DRILL_DIR/log/drillbit.out"
+  #$DSH "cat $BENCH_DRILL_DIR/conf/drill-override.conf"
   $DSH "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh status"
   #ping -c30 vagrant-99-01:
   # Run the command and time it
-  $(get_local_apps_path)/${DRILL_VERSION}/bin/sqlline -u jdbc:drill:zk:vagrant-99-00:2181
+  #$(get_local_apps_path)/${DRILL_VERSION}/bin/sqlline -u jdbc:drill:zk:vagrant-99-00:2181
   #$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-conf
   time_cmd_master "$drill_cmd" "$time_exec"
 
