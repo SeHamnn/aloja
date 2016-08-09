@@ -183,7 +183,8 @@ execute_drill(){
   $DSH "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh status"
   #ping -c30 vagrant-99-01:
   # Run the command and time it
-  #$(get_local_apps_path)/${DRILL_VERSION}/bin/sqlline -u jdbc:drill:zk:vagrant-99-00:2181
+  #echo 'select * from sys.`memory`;' > test.sql
+  #$(get_local_apps_path)/${DRILL_VERSION}/bin/sqlline -u jdbc:drill:zk:vagrant-99-00:2181 -f test.sql
   #$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-conf
   time_cmd_master "$drill_cmd" "$time_exec"
 
