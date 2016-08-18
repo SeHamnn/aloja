@@ -123,7 +123,9 @@
 		          <a href="#" class="navlink dropdown-toggle" data-toggle="dropdown">Config Evaluations <span class="caret"></span></a>
 		          <ul class="dropdown-menu" role="menu">
 				<li {% if selected is defined and selected == 'Best configuration' %}class="active"{% endif %}><a class="navlink" href="{{ path('bestconfig') }}">Overall Best Configuration</a></li>
-				<li {% if selected is defined and selected == 'Config Improvement' %}class="active"{% endif %}><a class="navlink" href="{{ path('configimprovement') }}">Configuration Improvement</a></li>
+     			  <li {% if selected is defined and selected == 'Execution Times' %}class="active"{% endif %}><a class="navlink" href="{{ path('exec_times') }}">Configuration Improvement</a></li>
+					  <li {% if selected is defined and selected == 'Config Improvement' %}class="active"{% endif %}><a class="navlink" href="{{ path('configimprovement') }}">Configuration Improvement (Speedup)</a></li>
+
 				<li {% if selected is defined and selected == 'Parameter Evaluation' %}class="active"{% endif %}><a class="navlink" href="{{ path('parameval') }}">Parameter Evaluation</a></li>
 				<li class="divider"></li>
 				<li {% if selected is defined and selected == 'mlcrossvar' %}class="active"{% endif %}><a class="navlink" href="{{ path('mlcrossvar') }}">Variable Visualization</a></li>
@@ -136,8 +138,9 @@
 			<li class="dropdown">
 		          <a href="#" class="navlink dropdown-toggle" data-toggle="dropdown">Cost/Perf Evaluation <span class="caret"></span></a>
 		          <ul class="dropdown-menu" role="menu">
-                    <li {% if selected is defined and selected == 'Number of Nodes Evaluation' %}class="active"{% endif %}><a class="navlink" href="{{ path('nodeseval') }}">Cost/Perf Scalability of VMs</a></li>
-					<li {% if selected is defined and selected == 'Datasizes Scalability' %}class="active"{% endif %}><a class="navlink" href="{{ path('datasizeseval') }}">Cost/Perf Scalability of Datasizes</a></li>
+                    <li {% if selected is defined and selected == 'Number of Nodes Evaluation' %}class="active"{% endif %}><a class="navlink" href="{{ path('nodeseval') }}">Cost/Perf scalability by VMs</a></li>
+					<li {% if selected is defined and selected == 'Datasizes Scalability' %}class="active"{% endif %}><a class="navlink" href="{{ path('datasizeseval') }}">Cost/Perf scalability by data size</a></li>
+					  <li {% if selected is defined and selected == 'Cores Scalability' %}class="active"{% endif %}><a class="navlink" href="{{ path('coreseval') }}">Cost/Perf scalability by cores</a></li>
 			        <li {% if selected is defined and selected == 'Cost Evaluation' %}class="active"{% endif %}><a class="navlink" href="{{ path('costperfeval') }}">Cost/Perf Evaluation of execs</a></li>
 			        <li {% if selected is defined and selected == 'Best Clusters Cost Evaluation' %}class="active"{% endif %}><a class="navlink" href="{{ path('bestcostperfclustereval') }}">Cost/Perf Evaluation of clusters</a></li>
 			        <li {% if selected is defined and selected == 'Cost-Effectiveness of clusters' %}class="active"{% endif %}><a class="navlink" href="{{ path('clustercosteffectiveness') }}">Cost-Effectiveness of clusters</a></li>
@@ -308,11 +311,82 @@
 				}
 			}
 		});
+
+		var labelLookup = $("#label-lookup").data("label-lookup");
+
 		$("form[name='configFilters'] input").change(function() {
 			if($(this).attr('name') != 'presets') {
 				$("select[name='presets']").val("none");
 			}
+
+			updateActiveFilters();
 		});
+
+		function renderFilters(activeFilters) {
+			var target = $(".active-filters");
+			var keys = Object.keys(activeFilters);
+
+			if (keys.length === 0) {
+				target.empty();
+				return;
+			}
+
+			function removeFilter(filterName) {
+				return function() {
+					var container = $(".container" + filterName);
+					if (container.length > 0) {
+						container.find("input[type='checkbox']").prop("checked", false);
+					}
+					else {
+						$("input[name='" + filterName + "']").val("");
+					}
+
+					updateActiveFilters();
+				};
+			}
+
+			var filters = keys.reduce(function (prev, curr) {
+				var filter = activeFilters[curr];
+
+				var button = $("<button type='button' title='remove filter' class='remove-filter btn btn-default btn-sm'>"
+				+ "<span class='remove-icon'>\327</span>"
+				+ "<span class='filter-description'><strong>" + filter.label + "</strong>"
+				+ " (" + filter.values.join(", ") + ")</span>"
+				+ "</button>").click(removeFilter(curr));
+
+				return prev.concat(button);
+			}, []);
+
+			var container = $("<div class='filter-buttons'></div>").append(filters);
+
+			target.empty().append([$("<h4>Active Filters</h4>"), container]);
+		}
+
+		function updateActiveFilters() {
+			var formState = $("#configFilters").serializeArray();
+			var namesToSkip = ["presets", "submit", "valid", "filter", "prepares", "uobsr", "selected-groups"];
+			var activeFilters = formState.reduce(function (prev, curr) {
+				var name = curr.name.replace(/\[]$/, "");
+				if (namesToSkip.indexOf(name) > -1) return prev;
+				if (curr.value.trim() === "") return prev;
+
+				if (!prev[name]) {
+					prev[name] = {
+						label: labelLookup[name],
+						values: [curr.value]
+					};
+				}
+				else {
+					prev[name].values.push(curr.value);
+				}
+
+				return prev;
+			}, {});
+
+			renderFilters(activeFilters);
+		}
+
+		updateActiveFilters();
 
 		$("span.selectAll").click(function() { 
 			$(this).parent().find('.panel-body').first().find('input').prop('checked',true);

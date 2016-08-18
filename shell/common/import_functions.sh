@@ -32,12 +32,13 @@ insert_DB(){
   rm "$2"
 }
 
-# Transition function to be able to import an especific folder
+# Transition function to be able to import an specific folder
 # $1 folder to import
 # $2 reload caches
 import_from_folder() {
   local folder="$1"
   local reload_caches="$2"
+  local export_to_PAT="$3"
 
   # Remove trailing slash if any
   [ "${folder:(-1)}" == "/" ] && folder="${folder:0:(-1)}"
@@ -64,7 +65,8 @@ import_from_folder() {
   PARALLEL_INSERTS="" #if to fork subprocecess when inserting data
   MOVE_TO_DONE="" #if set moves completed folders to DONE
 
-  sadf="/usr/bin/sadf"
+  sadf="$(which sadf)" # Tipically in /usr/bin/sadf
+  sar="$(which sar)"
 
   if ! which mysql ; then
     source "$ALOJA_REPO_PATH/shell/common/install_functions.sh"
@@ -72,7 +74,7 @@ import_from_folder() {
   fi
 
   # Only when run from the vagrant cluster, but not in the vagrant aloja-web (or others)
-  if ! inside_vagrant || [ "$(hostname)" != "aloja-web" ] ; then
+  if inside_vagrant && [ "$(hostname)" != "aloja-web" ] ; then
     MYSQL_CREDENTIALS="-uvagrant -pvagrant -h aloja-web -P3306"
   fi
 
@@ -82,7 +84,7 @@ import_from_folder() {
   MYSQL="sudo mysql $MYSQL_ARGS $DB -e "
 
   # Finally, run the command
-  import_folder "$folder"
+  import_folder "$folder" "$export_to_PAT"
   logger "INFO: clearing unzipped files"
   delete_untars "$BASE_DIR/$folder"
 
@@ -101,8 +103,10 @@ import_from_folder() {
 # Imports the given folder into ALOJA-WEB
 # TODO old code moved here need refactoring
 # $1 folder to import
+# $2 export to PAT
 import_folder() {
   local folder="$1"
+  local export_to_PAT="$2"
 
   #filter folders by date
   min_date="20120101"
@@ -116,12 +120,28 @@ import_folder() {
 
   folder_time="$(date --utc --date "${folder:0:8}" +%s)"
 
+  if [ "$export_to_PAT" ] ; then
+    logger "WARNING: exporting system metrics to PAT"
+  fi
+
   if [ -d "$folder" ] && [ "$folder_time" -gt "$min_time" ] ; then
     logger "INFO: Entering folder\t$folder"
     cd "$folder"
 
     #get all executions details
-    exec_params="$(get_exec_params "log_${folder}.log" "$folder")"
+    if [ -f "log_${folder}.log" ] ; then
+      logger "INFO: Found legacy stile log file"
+      local log_folder_file="log_${folder}.log"
+    elif [ -f "run_benchs.sh.log" ] ; then
+      logger "WARNING: Found new style config file, but in legacy method (missing config.sh?)"
+      local log_folder_file="run_benchs.sh.log"
+    else
+      logger "ERROR: cannot find a valid run log file for exec $folder. Continuing..."
+      return 0
+    fi
+
+    exec_params="$(get_exec_params "$log_folder_file" "$folder")"
+
     hadoop_version=$(extract_config_var "HADOOP_VERSION")
     hadoop_major_version="$(get_hadoop_major_version "$hadoop_version")"
 
@@ -176,7 +196,26 @@ import_folder() {
         exec="${folder}/${bench_folder}"
 
         #insert config and get ID_exec
-        exec_values=$(echo "$exec_params" |egrep "^\"$bench_folder\"")
+        exec_values="$(echo -e "$exec_params"|egrep -m1 "^\"${bench_folder}\"")"
+
+        if [ "$export_to_PAT" ] ; then
+          PAT_folder="../../PAT_${folder}/${bench_folder}"
+
+          local start_date="$(echo -e "$exec_values"|cut -d',' -f 3)"
+          start_date="${start_date:1:(-1)}" #strip quotes
+          PAT_start_ts="$(date -d "$start_date" +%s)"
+
+          mkdir -p "$PAT_folder"
+
+          # Copy the template if available
+          local xlsm_file_path="$ALOJA_REPO_PATH/aloja-tools/result_templatev1.xlsm"
+          if [ ! -f "$xlsm_file_path" ] ; then
+            logger "INFO: Downloading PAT's template file"
+            wget "http://aloja.bsc.es/public/files/result_templatev1.xlsm" -O "$xlsm_file_path" || rm "$xlsm_file_path"
+          else
+            cp "$xlsm_file_path" "$PAT_folder/PAT_${folder}_${bench_folder}.xlsm"
+          fi
+        fi
 
         if [[  $folder == *_az ]] ; then
           id_cluster="2"
@@ -200,6 +239,7 @@ import_folder() {
             #id_cluster="1"
           fi
         fi
+#logger "DEBUG: EV $exec_values"
 
         if [ "$exec_values" ] ; then
           folder_OK="$(( folder_OK + 1 ))"
@@ -212,7 +252,7 @@ import_folder() {
             run_num="1"
           fi
 
-logger"FN $bench_folder RN $run_num EV $exec_values"
+logger "INFO: $bench_folder RN $run_num EV $exec_values"
           # Legacy config, taken from folder and log
           if [ "${name:15:6}" == "_conf_" ]; then
             insert="INSERT INTO aloja2.execs (id_exec,id_cluster,exec,bench,exe_time,start_time,end_time,net,disk,bench_type,maps,iosf,replication,iofilebuf,comp,blk_size,zabbix_link,hadoop_version,exec_type)
@@ -263,7 +303,7 @@ logger"FN $bench_folder RN $run_num EV $exec_values"
                     scale_factor=VALUES(scale_factor);"
           fi
 
-          #logger "DEBUG: SQL:\n $insert"
+          logger "DEBUG: SQL:\n $insert"
           $MYSQL "$insert"
 
           if [ "$hadoop_major_version" == "2" ]; then
@@ -302,10 +342,10 @@ logger"FN $bench_folder RN $run_num EV $exec_values"
         # Get the DB id for the exec
         id_exec="$(get_id_exec "$exec")"
 
-        # Save the different id_execs to construc the URL at the end
+        # Save the different id_execs to construct the URL at the end
         id_execs+=("$id_exec")
 
-        logger "DEBUG: EP $exec_params \nEV $exec_values\nIDE $id_exec\nCluster $id_cluster"
+logger "DEBUG: EP $exec_params \nEV $exec_values\nIDE $id_exec\nCluster $id_cluster"
 
         if [[ ! -z "$id_exec" ]] && [ -z "$ONLY_META_DATA" ] ; then
 
@@ -334,6 +374,13 @@ logger"FN $bench_folder RN $run_num EV $exec_values"
             wait
           fi
         fi
+
+        # Check if the export to Intel's PAT format was requested
+        if [ "$export_to_PAT" ] ; then
+          export2PAT
+          logger "INFO: Exported to PAT traces to $PAT_folder"
+        fi
+
         cd ..; logger "INFO: Leaving folder $bench_folder\n"
 
         #update DB filters
@@ -344,7 +391,13 @@ logger"FN $bench_folder RN $run_num EV $exec_values"
       else
         logger "ERROR: cannot find folder $bench_folder\nLS: $(ls -lah)"
       fi
+
+      if [ -d "$bench_folder" ] ; then
+        logger "INFO: deleting bench folder: $bench_folder to save space"
+        rm -rf "$bench_folder"
+      fi
     done #end for bzip file
+
     cd ..; logger "INFO: Leaving folder $folder\n"
 
     if [ "$MOVE_TO_DONE" ] ; then
@@ -380,7 +433,12 @@ get_insert_cluster_sql() {
     source "$clusterConfigFile"
 
     #load the providers specific functions and overrrides
-    providerFunctionsFile="$CUR_DIR_TMP/../../aloja-deploy/providers/${defaultProvider}.sh"
+
+    if [ "$defaultProvider" == "azure_ADLA" ] ; then
+      providerFunctionsFile="$CUR_DIR_TMP/../../aloja-deploy/providers/azure.sh"
+    else
+      providerFunctionsFile="$CUR_DIR_TMP/../../aloja-deploy/providers/${defaultProvider}.sh"
+    fi
 
     source "$providerFunctionsFile"
 
@@ -399,6 +457,11 @@ ON DUPLICATE KEY UPDATE id_host='$clusterID$(get_vm_id "$nodeName")', id_cluster
     for nodeName in $(get_slaves_names) ; do
       sql+="insert into hosts set id_host='$clusterID$(get_vm_id "$nodeName")', id_cluster='$clusterID', host_name='$nodeName', role='slave'
 ON DUPLICATE KEY UPDATE id_host='$clusterID$(get_vm_id "$nodeName")', id_cluster='$clusterID', host_name='$nodeName', role='slave';\n"
+    done
+
+    for nodeName in $(get_extra_node_names) ; do
+      sql+="insert into hosts set id_host='$clusterID$(get_vm_id "$nodeName")', id_cluster='$clusterID', host_name='$nodeName', role='other'
+ON DUPLICATE KEY UPDATE id_host='$clusterID$(get_vm_id "$nodeName")', id_cluster='$clusterID', host_name='$nodeName', role='other';\n"
     done
 
     echo -e "$sql\n"
@@ -523,6 +586,8 @@ update ignore aloja2.execs SET exec_type = 'default' WHERE id_exec = '$1' AND ex
 # $1 log_file path
 legacy_get_exec_params() {
   #here get the zabbix URL to parse filtering prepares and other benchmarks
+  # Format http://minerva.bsc.es:8099/zabbix/screens.php?&fullscreen=0&elementid=19&stime=${start_date}&period=${total_secs}
+  # as found in: SENDING: hibench.runs 1411718451 <a href='http://minerva.bsc.es:8099/zabbix/screens.php?&fullscreen=0&elementid=AZ&stime=20140926082343&period=2228'>terasort conf_ETH_HDD_b_m6_i10_r1_I65536_c1_z128_al-05</a> <strong>Time:</strong> 2228 s.
   #|grep -v -e 'prep_' -e 'b_min_' -e 'b_10_'|
   local exec_params="$(grep  -e 'href'  "$1" |grep 8099 |\
   awk -v exec=$2 ' \
@@ -556,6 +621,94 @@ legacy_get_exec_params() {
   echo -e "$exec_params"
 }
 
+# Gets the configuration for the benchmark for new format, but without config.sh file
+# $1 log_file path
+# output format:
+# "wordcount","2286","2015-03-17 20:47:41","2015-03-17 21:25:47","ETH","RL3","","4","10","1","65536","0","64","http://minerva.bsc.es:8099/zabbix/screens.php?&fullscreen=0&elementid=AZ&stime=20150317214741&period=2286"
+# "job","exe_time","start_time","end_time","net","disk","bench","maps","iosf","replication","iofilebuf","comp","blk_size","zabbix_link"
+# bench,exe_time,start_time,end_time,net,disk,bench_type,maps,iosf,replication,iofilebuf,comp,blk_size,zabbix_link,hadoop_version,exec_type
+# folder format:
+# 20160802_164734_ETH_HDD_bD2F-Bench-hive_S0_D8_dataproc-8standard4-196
+get_exec_params_from_log() {
+  local log_file="$1"
+  local folder="$2"
+
+  local start_point="INFO: RUNNING"
+  local end_point="DEBUG: BENCH_TIME"
+
+  local execs
+  local net="${folder:16:3}"
+  local disk="${folder:20:3}"
+
+  local bench_type_start="25"
+  local bench_type_end="$(echo -e "${folder:bench_type_start}"|grep -b -o '_'|head -n 1|cut -d: -f1)"
+  local bench_type="${folder:bench_type_start:bench_type_end}"
+
+  local bench_names # list of names to mark the repeated ones
+  local bench_name_tmp
+  local run_num # for repeated names
+
+  local datasize scale_factor
+  local has_orc_line="$(grep -m1  -n -i "Table tpch_orc_" "$log_file")"
+
+  if [ "$has_orc_line" ] ; then
+    local start_orc end_orc
+    start_orc="$(echo -e "$has_orc_line"|grep -b -o "tpch_orc_"|cut -d: -f1)"
+    start_orc="$((start_orc + 9 ))"
+    end_orc="$(echo -e "${has_orc_line:start_orc}"|grep -b -o '\.'|cut -d: -f1)"
+
+    scale_factor="${has_orc_line:start_orc:end_orc}"
+
+    [ "$scale_factor" ] && datasize="$((scale_factor * 1000000000))"
+  fi
+
+  local bench_times="$(grep "${start_point}\|${end_point}" "$log_file")"
+
+  if [ "$bench_times" ] ; then
+    local found bench_name bench_time bench_end_date
+    while read -r line ; do
+      if [[ "$line" == *"$start_point"* ]] ; then
+        bench_name="$(echo -e "$line"|cut -d' ' -f5)"
+        # clean up chars form the log file (there is an end char from the colors)
+        bench_name="$(only_alpha "$bench_name")"
+
+        [ "$bench_name" ] && found="1" || found=""
+
+        if ! inList "$bench_names" "$bench_name" ; then
+          bench_names+="$bench_name "
+        else
+          for run_num in {2..100} ; do
+            bench_name_tmp="${bench_name}__$run_num"
+            if ! inList "$bench_names" "$bench_name_tmp" ; then
+              break
+            fi
+          done
+          bench_name="$bench_name_tmp"
+        fi
+      fi
+
+      if [[ "$found" && "$line" == *"$end_point"* ]] ; then
+        bench_time="$(echo -e "$line"|cut -d'=' -f2)"
+        # clean up chars form the log file (there is an end char from the colors)
+        bench_time="$(only_alpha "$bench_time")"
+        bench_end_date="${line:0:4}-${line:4:2}-${line:6:2} ${line:9:2}:${line:11:2}:${line:13:2}"
+        execs+="\"$bench_name\",\"$bench_time\",DATE_SUB(\"$bench_end_date\",INTERVAL ${bench_time} SECOND),\"$bench_end_date\","
+        execs+="\"$net\",\"$disk\",\"$bench_type\",\"\",\"\",\"\",\"\",\"\",\"\",\"\",\"\",\"Imported using recovery log\",\"$datasize\",\"$scale_factor\"\n"
+
+        found=""
+        bench_name=""
+      fi
+    done <<< "$bench_times"
+  else
+    logger "DEBUG: No bench times found"
+  fi
+
+  echo -e "$execs"
+
+#  die "DEBUG: $log_file bench times $bench_times\n$execs\nfolder $folder"
+
+}
+
 # Gets the configuration for the benchmark
 # for both legacy format (from folder name)
 # and newer, from config.sh
@@ -575,8 +728,10 @@ get_exec_params() {
   # different parsers for legacy-style and new-style configs
   if [ "${name:15:6}" == "_conf_" ]; then
     exec_params="$(legacy_get_exec_params "$log_file")"
+  elif [ ! -f "config.sh" ] ; then
+     # logger "WARNING: cannot find config.sh file, resorting to legacy format"
+     exec_params="$(get_exec_params_from_log "$log_file" "$folder")"
   else
-
     local job=""
     local exe_time=""
     local start_time=""
@@ -968,9 +1123,114 @@ import_hadoop_jobs() {
   cd ..;
 }
 
-import_sar_files() {
+# Checks if the generated sysstat file differs from the system's version
+# $1 sar_file in the current path
+check_sysstat_version() {
+  local sar_file="$1"
+  if [ ! "$SAR_VERSION_BENCH" ] ; then
+    SAR_VERSION_LOCAL="$($sar -V|head -n 1|cut -d' ' -f 3)"
+    SAR_VERSION_BENCH="$($sadf -H "$sar_file"|tail -n 1|cut -d' ' -f 8)"
+
+    if [ "$SAR_VERSION_LOCAL" != "$SAR_VERSION_BENCH" ] ; then
+      if [ -f "$ALOJA_REPO_PATH/aloja-tools/src/sysstat/sysstat-$SAR_VERSION_BENCH/sadf" ] ; then
+        logger "WARNING: sysstat versions differ.  Local version: $SAR_VERSION_LOCAL Bench version: $SAR_VERSION_BENCH\nFound version: $SAR_VERSION_BENCH in tools folder, using that one."
+        sadf="$ALOJA_REPO_PATH/aloja-tools/src/sysstat/sysstat-$SAR_VERSION_BENCH/sadf"
+      else
+        logger "WARNING: sysstat versions differ.  Local version: $SAR_VERSION_LOCAL Bench version: $SAR_VERSION_BENCH\nContinuing any how..."
+      fi
+    fi
+  fi
+}
+
+# Exports data to PAT format
+export2PAT() {
+  #SYSTAT
+  logger "INFO: Exporting to PAT sysstat and vmstat files"
   for sar_file in sar*.sar ; do
-    if [[ $(head $sar_file |wc -l) > 1 ]] ; then
+    if [ -s "$sar_file" ] ; then
+
+      check_sysstat_version "$sar_file"
+
+      local hostn="${sar_file:4:-4}"
+      local PAT_host_folder="$PAT_folder/instruments/$hostn"
+
+      [ ! -d "$PAT_host_folder" ] && mkdir -p "$PAT_host_folder"
+
+      logger "INFO: Exporting to PAT sysstat for host: ${hostn}."
+      # cpustat file.
+      # For CPU, we filter values over 100 (sometimes present)
+
+      $sadf -d -U "$sar_file" -- -u |\
+      awk -F ';' "NR == 1 {s = \"\"; for (i = 5; i <= NF; i++) s = s \$i \" \"; print \"HostName TimeStamp CPU \" s} \
+                  NR > 1 {s = \"\"; for (i = 5; i <= NF; i++) if(\$i > 101 ){s = s 0.00 \" \"} else {s = s \$i \" \"}; print \$1 \" \" \$3 \" ALL \" s}" > "$PAT_host_folder/cpustat"
+
+      # memstat file
+      paste -d ';' <($sadf -d -U "$sar_file" -- -B) <($sadf -d "$sar_file" -- -S|cut -d';' -f4-) <($sadf -d "$sar_file" -- -r|cut -d';' -f4-)|\
+      awk -F ';' "NR == 1 {s = \"\"; for (i = 4; i <= NF; i++) s = s \$i \" \"; print \"HostName TimeStamp \" s} \
+                  NR > 1 {s = \"\"; for (i = 3; i <= NF; i++) s = s \$i \" \"; print \$1 \" \" s}" > "$PAT_host_folder/memstat"
+
+      # netstat file
+      $sadf -d -U "$sar_file" -- -n DEV |\
+      awk -F ';' "NR == 1 {s = \"\"; for (i = 4; i <= NF; i++) s = s \$i \" \"; print \"HostName TimeStamp \" s} \
+                  NR > 1 {s = \"\"; for (i = 4; i <= NF; i++) s = s \$i \" \"; print \$1 \" \" \$3 \" \" s}" > "$PAT_host_folder/netstat"
+
+    else
+      logger "WARNING: No valid sysstat files for exporting to PAT"
+    fi
+  done
+
+  # VMSTAT
+  for vmstats_file in vmstat-*.log ; do
+    if [ -s $vmstats_file ] ; then
+      local hostn="${vmstats_file:7:-4}"
+      logger "INFO: Exporting to PAT vmstat for host: ${hostn}."
+      local PAT_host_folder="$PAT_folder/instruments/$hostn"
+      [ ! -d "$PAT_host_folder" ] && mkdir -p "$PAT_host_folder"
+      # vmstat file
+      awk "NR == 2 {\$1=\"HostName TimeStamp \"\$1; print } NR > 2 {\$1=\"${hostn} \" ($PAT_start_ts + NR-2) \" \"\$1; print }" "$vmstats_file" > "$PAT_host_folder/vmstat"
+    else
+      logger "WARNING: No valid vmstat files for exporting to PAT"
+    fi
+  done
+  
+  # IOSTAT
+  for iostat_file in iostat-*.log ; do
+    if [ -s $iostat_file ] ; then
+      local hostn="${iostat_file:7:-4}"
+      logger "INFO: Exporting to PAT iostat for host: ${hostn}."
+      local PAT_host_folder="$PAT_folder/instruments/$hostn"
+      [ ! -d "$PAT_host_folder" ] && mkdir -p "$PAT_host_folder"
+      # vmstat file
+      cp "$iostat_file" "$PAT_host_folder/iostat"
+    else
+      logger "WARNING: No valid iostat files for exporting to PAT"
+    fi
+  done
+
+  # jvms
+  for mapred_file in MapRed-*.log ; do
+    if [ -s $mapred_file ] ; then
+      local hostn="${mapred_file:7:-4}"
+      logger "INFO: Exporting to PAT MapRed for host: ${hostn}."
+      local PAT_host_folder="$PAT_folder/instruments/$hostn"
+      [ ! -d "$PAT_host_folder" ] && mkdir -p "$PAT_host_folder"
+      # vmstat file
+      cp "$mapred_file" "$PAT_host_folder/jvms"
+    else
+      logger "WARNING: No valid mapred files for exporting to PAT"
+    fi
+  done
+}
+
+
+
+import_sar_files() {
+  logger "INFO: Importing SAR files in: $(pwd)"
+
+  for sar_file in sar*.sar ; do
+    if [ -s "$sar_file" ] ; then
+
+      check_sysstat_version "$sar_file"
 
       for table_name in "SAR_cpu" "SAR_io_paging" "SAR_interrupts" "SAR_load" "SAR_memory_util" "SAR_memory" "SAR_swap" "SAR_swap_util" "SAR_switches" "SAR_block_devices" "SAR_net_devices" "SAR_io_rate" "SAR_net_errors" "SAR_net_sockets"; do
         local sar_command=""
@@ -1033,7 +1293,7 @@ import_sar_files() {
 
 import_vmstats_files() {
   for vmstats_file in vmstat-*.log ; do
-    if [[ $(head $vmstats_file |wc -l) -gt 1 ]] ; then
+    if [ -s "$vmstats_file" ] ; then
       #get host name from file name
       hostn="${vmstats_file:7:-4}"
       table_name="VMSTATS"
@@ -1046,7 +1306,6 @@ import_vmstats_files() {
       else
         insert_DB "aloja_logs.${table_name}" "tmp_${vmstats_file}.csv" "" ","
       fi
-
     else
       logger "DEBUG: vmstats File $vmstats_file is INVALID"
     fi
@@ -1071,7 +1330,7 @@ import_AOP4Hadoop_files() {
 
 import_bwm_files() {
   for bwm_file in bwm-*.log ; do 2> /dev/null
-    if [ -f "$bwm_file" ] && [[ $(head $bwm_file |wc -l) > 1 ]] ; then
+    if [ -f "$bwm_file" ] && [ -s "$bwm_file" ] ; then
       #get host name from file name
       hostn="${bwm_file:4:-4}"
       #there are two formats, 9 and 15 fields
@@ -1200,4 +1459,35 @@ return 1 #disabled for now...
 #  hit_page "http://$host_name/metrics?type=NETWORK"
 #  hit_page "http://$host_name/dbscan"
 #  hit_page "http://$host_name/dbscanexecs"
+}
+
+# Sends commands to MySQL every 250 lines (default)
+# $1 full text
+# $2 number of lines to split the command
+exec_by_lines() {
+  local text="$1"
+  local lines="$2"
+
+  [ ! "$lines" ] && lines=250 # Default
+
+  local group=""
+  local it=0
+  while read -r text_line ; do
+
+    group+="
+$text_line"
+
+    it_num="$((it_num+1))"
+    # Separate every 100 lines
+
+    if ((it_num % lines == 0)) ; then
+      logger "INFO: sending  $lines lines to MySQL"
+      $MYSQL "$group"
+      group=""
+    fi
+
+  done <<< "$text"
+
+  logger "INFO: sending FINAL lines to MySQL"
+  $MYSQL "$group"
 }

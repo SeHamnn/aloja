@@ -19,6 +19,9 @@ TPCH_DB_NAME="tpch_${BENCH_FILE_FORMAT}_${TPCH_SCALE_FACTOR}"
 [ "$(get_hadoop_major_version)" != "2" ] && die "Hadoop v2 is required for $BENCH_SUITE"
 [ "$BENCH_FILE_FORMAT" != "orc" ] && die "Only orc file format is supported for now, got: $BENCH_FILE_FORMAT"
 
+# TODO: temporary patch for missing gcc on azure ubuntu
+[ ! "$(which gcc)" ] && sudo apt-get install -y -q gcc make
+[ ! "$(which gcc)" ] && die "Build tools not installed for TPC-H datagen to work"
 
 D2F_folder_name="D2F-Bench-master"
 BENCH_REQUIRED_FILES["$D2F_folder_name"]="http://github.com/Aloja/D2F-Bench/archive/master.zip"
@@ -139,10 +142,10 @@ tpc-h_validate_load() {
 }
 
 tpc-h_delete_dbgen(){
-  if [ ! "$BENCH_KEEP_FILES" == "1" ] && [ ! "$BENCH_LEAVE_SERVICES" "1"  ] ; then
+  #if [ ! "$BENCH_KEEP_FILES" == "1" ] && [ ! "$BENCH_LEAVE_SERVICES" "1"  ] ; then
     logger "INFO: deleting original DBGEN files to save space"
     hadoop_delete_path "$bench_name" "$TPCH_HDFS_DIR/$TPCH_SCALE_FACTOR"
-  fi
+  #fi
 }
 
 tpc-h_datagen() {
@@ -165,7 +168,7 @@ tpc-h_datagen() {
     # Optimize tables to format
     tpc-h_load-optimize
 
-    # Try to validate data creatation
+    # Try to validate data creation
     tpc-h_validate_load
 
     # Delete source files

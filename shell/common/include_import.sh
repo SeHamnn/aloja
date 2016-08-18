@@ -27,30 +27,14 @@ source_file "$configFolderPath/$clusterConfigFile"
 logger "Starting ALOJA import2db tool"
 
 #4) Load the common cluster functions
-
+[ ! "$ALOJA_REPO_PATH" ] && ALOJA_REPO_PATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/../../"
 source_file "$ALOJA_REPO_PATH/shell/common/cluster_functions.sh"
 source_file "$ALOJA_REPO_PATH/shell/common/import_functions.sh"
 source_file "$ALOJA_REPO_PATH/shell/common/common_hadoop.sh"
+source_file "$ALOJA_REPO_PATH/shell/common/common_benchmarks.sh"
 
-
-#Check if to use a special version of sar or the system one
-#nico pc
-if [[ ! -z $(uname -a|grep "\-ARCH") ]] ; then
-  sadf="$CUR_DIR/sar/archlinux/sadf"
-  DEV_PC="true"
-#ubuntu
-#elif [[ ! -z $(lsb_release -a|grep Ubuntu) ]] ; then
-#  sadf="$CUR_DIR/sar/ubuntu/sadf"
-#aaron's machines
-elif [ "$(hostname)" == "acall" ] || [ "$(hostname)" == "belkar" ] ; then
-   DEV_PC="true"
-#vagrant
-#elif [ "$(hostname)" == "vagrant" ] ; then
-#  DEV_PC="true"
-#default
-else
-  sadf="/usr/bin/sadf"
-fi
+sadf="$(which sadf)" # Tipically in /usr/bin/sadf
+sar="$(which sar)"
 
 #TABLE MANIPULATION
 #MYSQL_ARGS="-uroot --local-infile -f -b --show-warnings " #--show-warnings -B
