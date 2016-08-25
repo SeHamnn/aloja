@@ -1,11 +1,13 @@
 # Benchmark based on Pavlo's benchmark and HiveBench hivebench implementation
 source_file "$ALOJA_REPO_PATH/shell/common/common_hive.sh"
 set_hive_requires
+source_file "$ALOJA_REPO_PATH/shell/common/common_drill_test.sh"
+set_drill_requires
 
 BENCH_REQUIRED_FILES["hivebench"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/hivebench.tar.gz"
 
 #BENCH_REQUIRED_FILES["tpch-hive"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/tpch-hive.tar.gz"
-[ ! "$BENCH_LIST" ] && BENCH_LIST="datagen aggregation"
+[ ! "$BENCH_LIST" ] && BENCH_LIST="datagen aggregation test"
 
 data_location="/hivebench/data"
 hivebench_pages="1200" #hivebench default 120000000
@@ -22,6 +24,10 @@ benchmark_suite_config() {
 
   initialize_hive_vars
   prepare_hive_config "$HIVE_SETTINGS_FILE" "$HIVE_SETTINGS_FILE_PATH"
+
+  initialize_drill_vars
+  prepare_drill_config "$NET" "$DISK" "$BENCH_SUITE"
+  start_drill
 }
 
 # Iterate the specified benchmarks in the suite
@@ -98,3 +104,12 @@ INSERT OVERWRITE TABLE uservisits_aggre SELECT sourceIP, SUM(adRevenue) FROM use
   execute_hive "$bench_name" "-f '$local_file_path'" "time"
 }
 
+benchmark_test(){
+  local bench_name="${FUNCNAME[0]##*benchmark_}"
+  logger "INFO: Running $bench_name"
+  curl -X POST -H "Content-Type: application/json" -d '{"name":"hive", "config":{"type":"hive","enabled":true,"configProps":{"hive.metastore.uris":"thrift://127.0.0.1:9083","hive.metastore.sasl.enabled":"true"}}}' http://localhost:8047/storage/hive.json
+   execute_drill "$bench_name" '-e "show tables;"' "time"
+
+
+
+}
