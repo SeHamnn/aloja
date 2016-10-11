@@ -27,7 +27,7 @@ benchmark_suite_config() {
 
   initialize_drill_vars
   prepare_drill_config "$NET" "$DISK" "$BENCH_SUITE"
-  start_drill
+
 }
 
 # Iterate the specified benchmarks in the suite
@@ -59,6 +59,13 @@ benchmark_suite_save() {
 
 benchmark_suite_cleanup() {
   clean_hadoop
+  logger "INFO: Stopping HiveServer2"
+  # kill hiveserver2 since there is no command to stop it...
+  kill -9 $(ps aux | grep '[S]erver2' | awk '{print $2}')
+  #stops metastore
+  kill -9 $(lsof -t -i:9083)
+
+
 }
 
 benchmark_datagen() {
@@ -104,12 +111,33 @@ INSERT OVERWRITE TABLE uservisits_aggre SELECT sourceIP, SUM(adRevenue) FROM use
   execute_hive "$bench_name" "-f '$local_file_path'" "time"
 }
 
-benchmark_test(){
-  local bench_name="${FUNCNAME[0]##*benchmark_}"
-  logger "INFO: Running $bench_name"
-  curl -X POST -H "Content-Type: application/json" -d '{"name":"hive", "config":{"type":"hive","enabled":true,"configProps":{"hive.metastore.uris":"thrift://127.0.0.1:9083","hive.metastore.sasl.enabled":"true"}}}' http://localhost:8047/storage/hive.json
-   execute_drill "$bench_name" '-e "show tables;"' "time"
+benchmark_prepare_test(){
+
+  # Copy hive-site.xml to hive conf folder (thrift server)
+  #cp $(get_base_configs_path)/hive1_conf_template/hive-site.xml $(get_local_apps_path)/apache-hive-1.2.1-bin/conf/
+  logger "INFO: Starting metastore server"
+  #execute_cmd_master "$bench_name" "$(get_hive_exports) $HIVE_HOME/bin/hive --service hiveserver2 &&"
+  logger "INFO: Executing with hive"
+  local hive_exports="$(get_hive_exports)"
+  local hive_bin="$HIVE_HOME/bin/hive"
+  local hive_cmd="$hive_exports
+  $hive_bin --service metastore &"
+  eval $hive_cmd
+  logger "INFO: Wait 120 seconds to get server started..."
+  sleep 120
 
 
 
 }
+
+benchmark_test(){
+
+  local bench_name="${FUNCNAME[0]##*benchmark_}"
+  logger "INFO: Running $bench_name"
+  start_drill
+  local show_databases="use sys;"
+  local local_file_path="$(create_local_file "$bench_name.sql" "$show_databases")"
+  execute_drill "$bench_name" "" "time"
+
+}
+

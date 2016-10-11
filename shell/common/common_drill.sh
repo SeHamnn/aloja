@@ -7,17 +7,31 @@ set_hadoop_requires
 source_file "$ALOJA_REPO_PATH/shell/common/common_zookeeper.sh"
 set_zookeeper_requires
 
+get_drill_config_folder() {
+  local config_folder_name
+
+  if [ "$HADOOP_CUSTOM_CONFIG" ] ; then
+    config_folder_name="$DRILL_CUSTOM_CONFIG"
+  else
+    config_folder_name="drill_1.6_conf_template"
+  fi
+
+  echo -e "$config_folder_name"
+}
+
+
+
 # Sets the required files to download/copy
 set_drill_requires() {
 
   [ ! "$DRILL_VERSION" ] && die "No DRILL_VERSION specified"
-
-  BENCH_REQUIRED_FILES["$DRILL_VERSION"]="http://apache.mesi.com.ar/drill/drill-1.6.0/$DRILL_VERSION.tar.gz"
+  BENCH_REQUIRED_FILES["$DRILL_VERSION"]="http://mirror.yannic-bonenberger.com/apache/drill/drill-1.8.0/$DRILL_VERSION.tar.gz"
 
   #also set the config here
   BENCH_CONFIG_FOLDERS="$BENCH_CONFIG_FOLDERS drill_1.6_conf_template"
 
 }
+
 
 # Helper to print a line with requiered exports
 get_drill_exports() {
@@ -33,17 +47,110 @@ export DRILL_LOG_DIR=$(get_local_bench_path)/${DRILL_VERSION}/bin;
   echo -e "$to_export\n"
 }
 
-# Returns the the path to the hadoop binary with the proper exports
-get_drill_cmd() {
-  local drill_exports
-  local drill_cmd
+# Get the list of slaves
+# TODO should be improved to include master node as worker node if necessary
+# $1 list of nodes
+# $2 master name
+get_drill_slaves() {
+  local all_nodes="$1"
+  local master_name="$2"
+  local only_slaves
 
-  drill_exports="$(get_drill_exports)"
+  if [ "$all_nodes" ] && [ "$master_name" ] ; then
+    only_slaves="$(echo -e "$all_nodes"|grep -v "$master_name")"
+  else
+    die "Empty list of nodes supplied"
+  fi
+
+  echo -e "$only_slaves"
+}
 
 
-  drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/sqlline -u jdbc:drill:zk:vagrant-99-00:2181 "
-  #drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-conf "
-  echo -e "$drill_cmd"
+#old code moved here
+# TODO cleanup
+initialize_drill_vars() {
+
+   BENCH_CONFIG_FOLDERS="$BENCH_CONFIG_FOLDERS drill_1.6_conf_template"
+
+  if [ "$clusterType" == "PaaS" ]; then
+    DRILL_HOME="/usr/bin/drill"
+    DRILL_CONF_DIR="/etc/drill/conf"
+  else
+     [ ! "$HDD" ] && die "HDD var not set!"
+
+     BENCH_DRILL_DIR="$(get_local_apps_path)/$DRILL_VERSION" #execution dir
+
+     DRILL_CONF_DIR="$HDD/drill_conf"
+     DRILL_EXPORTS="$(get_drill_exports)"
+
+     if [ ! "$BENCH_LEAVE_SERVICES" ] ; then
+       #make sure all spawned background jobs and services are stoped or killed when done
+       if [ "$INSTRUMENTATION" == "1" ] ; then
+         update_traps "stop_drill;" "update_logger"
+       else
+         update_traps "stop_drill;" "update_logger"
+       fi
+     else
+       update_traps "echo 'WARNING: leaving services running as requested (stop manually).';"
+     fi
+  fi
+}
+
+
+
+prepare_drill_config(){
+
+ if [ "$clusterType" == "PaaS" ]; then
+  # Save config
+  logger "INFO: Saving bench spefic config to job folder"
+  for node in $node_names ; do
+    ssh "$node" "
+    mkdir -p $JOB_PATH/conf_$node;
+    cp $DRILL_CONF_DIR/* $JOB_PATH/conf_$node/" &
+  done
+ else
+  logger "INFO: Preparing drill run specific config"
+  $DSH "mkdir -p $HDD/drill_conf; cp -r $(get_local_configs_path)/$(get_drill_config_folder)/* $(get_local_apps_path)/${DRILL_VERSION}/conf;"
+
+  # Set correct permissions for instrumentation's sniffer
+  [ "$INSTRUMENTATION" == "1" ] && instrumentation_set_perms
+ fi
+}
+
+
+
+# Just an alias
+start_drill() {
+  restart_drill
+}
+
+#TODO DO REAL CHECK IF DRILLBIT IS READY (LIKE IN HADOOP FOR HDFS)
+restart_drill(){
+  if [ "$clusterType" != "PaaS" ]; then
+    logger "INFO: Restart DRILL"
+    #just in case stop all first
+    stop_drill
+
+    $DSH "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh start"
+    logger "INFO: Drill ready"
+  fi
+}
+
+# Stops drill and checks for open ports
+# $1 retry (to prevent recursion)
+stop_drill(){
+  local dont_retry="$1"
+
+  if [ "$clusterType=" != "PaaS" ] ; then
+    if [ ! "$dont_retry" ] ; then
+      logger "INFO: Stop Drill"
+    else
+      logger "INFO: Stop Drill (retry)"
+    fi
+    $DSH "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh stop"
+
+ fi
+
 }
 
 # Performs the actual benchmark execution
@@ -56,27 +163,42 @@ execute_drill(){
   local time_exec="$3"
 
   local drill_cmd="$(get_drill_cmd) $cmd"
-
+  #caused benchmark not to start, probably not enough ressources (have to test outside VMs)
   # Start metrics monitor (if needed)
-  if [ "$time_exec" ] ; then
-    save_disk_usage "BEFORE"
-    restart_monit
-    set_bench_start "$bench"
-  fi
+#  if [ "$time_exec" ] ; then
+#    save_disk_usage "BEFORE"
+#    restart_monit
+#    set_bench_start "$bench"
+#  fi
 
   logger "DEBUG: DRILL command:\n$drill_cmd"
 
   export JAVA_HOME="$(get_java_home)"
-  #echo -e $DRILL_CONF_DIR
+
   start_zookeeper
-  #bash $DRILL_HOME/bin/drillbit.sh restart
-  bash $DRILL_HOME/bin/drillbit.sh restart
-  bash $DRILL_HOME/bin/drillbit.sh status
-  echo 'done'
-  #curl -X POST -H "Content-Type: application/json" -d '{"queryType":"SQL", "query": "SELECT * FROM sys.drillbits"}' http://localhost:31010/query.json
-  #bash $(get_local_apps_path)/${DRILL_VERSION}/bin/drill-localhost -e "select count(*) from (values(1));"
-  sleep 60
+  logger "INFO: Wait 120 seconds to get server started..."
+  sleep 120
+
+
+  #$DSH "cat $BENCH_DRILL_DIR/log/drillbit.out"
+  #$DSH "cat $BENCH_DRILL_DIR/conf/drill-override.conf"
+  $DSH "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh status"
+  #ping -c30 vagrant-99-01:
   # Run the command and time it
+  #echo 'select * from sys.`memory`;' > test.sql
+  #$(get_local_apps_path)/${DRILL_VERSION}/bin/sqlline -u jdbc:drill:zk:vagrant-99-00:2181 -f test.sql
+  #$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-conf
+  #curl -X POST -H "Content-Type: application/json" -d '{"name":"myplugin", "config": {"type": "file", "enabled": false, "connection": "file:///", "workspaces": { "root": { "location": "/", "writable": false, "defaultInputFormat": null}}, "formats": null}}' http://localhost:8047/storage/myplugin.json
+
+
+
+  #curl -X POST -H "Content-Type: application/json" -d '{"name":"hive", "config": {"type": "hive", "enabled": true,"configProps": {"hive.metastore.uris": "thrift://vagrant-99-00:9083","hive.metastore.warehouse.dir": "/tmp/drill_hive_wh","hive.metastore.sasl.enabled": "false"}}}' http://localhost:8047/storage/hive.json
+
+  #curl http://localhost:8047/storage.json
+  #curl http://localhost:8047/storage/hive.json
+  #curl http://localhost:8047/storage/myplugin.json
+
+  #bash $(get_local_apps_path)/${DRILL_VERSION}/bin/drill-embedded
   time_cmd_master "$drill_cmd" "$time_exec"
 
   # Stop metrics monitors and save bench (if needed)
@@ -88,21 +210,28 @@ execute_drill(){
   fi
 }
 
-initialize_drill_vars() {
-  BENCH_CONFIG_FOLDERS="$BENCH_CONFIG_FOLDERS drill_1.6_conf_template"
+# Returns the the path to the drill binary with the proper exports
+get_drill_cmd() {
+  local drill_exports
+  local drill_cmd
+  export JAVA_HOME="$(get_java_home)"
 
-  if [ "$clusterType" == "PaaS" ]; then
-    DRILL_HOME="/usr/bin/drill"
-    DRILL_CONF_DIR="/etc/drill/conf"
-  else
-    DRILL_HOME="$(get_local_apps_path)/${DRILL_VERSION}"
-    DRILL_CONF_DIR="$HDD/drill_conf"
-  fi
+  drill_exports="$(get_drill_exports)"
+  drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/sqlline -u jdbc:drill:zk:vagrant-99-00:2181 "
+  echo -e "$drill_cmd"
 }
+
 
 # $1 bench name
 save_drill() {
   logger "WARNING: missing to implement a proper save_drill()"
+  stop_drill
   save_zookeeper
   save_hadoop "$bench_name"
   }
+
+  #set hive plugin for drill
+set_hive_plugin(){
+  curl -X POST -H "Content-Type: application/json" -d '{"name":"hive", "config": {"type": "hive", "enabled": true,"configProps": {"hive.metastore.uris": "thrift://vagrant-99-00:9083","hive.metastore.warehouse.dir": "/tmp/drill_hive_wh","hive.metastore.sasl.enabled": "false"}}}' http://localhost:8047/storage/hive.json
+
+}

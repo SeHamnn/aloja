@@ -1,5 +1,5 @@
 # Benchmark to test Hive installation and configurations
-source_file "$ALOJA_REPO_PATH/shell/common/common_drill_test.sh"
+source_file "$ALOJA_REPO_PATH/shell/common/common_drill.sh"
 set_drill_requires
 
 #BENCH_REQUIRED_FILES["tpch-hive"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/tpch-hive.tar.gz"
