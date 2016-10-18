@@ -3,7 +3,7 @@
 source_file "$ALOJA_REPO_PATH/shell/common/common_hadoop.sh"
 set_hadoop_requires
 
-
+# TODO getting to start ZK outside of drill
 source_file "$ALOJA_REPO_PATH/shell/common/common_zookeeper.sh"
 set_zookeeper_requires
 
@@ -22,6 +22,7 @@ get_drill_config_folder() {
 
 
 # Sets the required files to download/copy
+# TODO : Setup own mirror for Drill
 set_drill_requires() {
 
   [ ! "$DRILL_VERSION" ] && die "No DRILL_VERSION specified"
@@ -33,7 +34,7 @@ set_drill_requires() {
 }
 
 
-# Helper to print a line with requiered exports
+# Helper to print a line with required exports
 get_drill_exports() {
   local to_export
 
@@ -45,24 +46,6 @@ export DRILL_LOG_DIR=$(get_local_bench_path)/${DRILL_VERSION}/bin;
 "
 
   echo -e "$to_export\n"
-}
-
-# Get the list of slaves
-# TODO should be improved to include master node as worker node if necessary
-# $1 list of nodes
-# $2 master name
-get_drill_slaves() {
-  local all_nodes="$1"
-  local master_name="$2"
-  local only_slaves
-
-  if [ "$all_nodes" ] && [ "$master_name" ] ; then
-    only_slaves="$(echo -e "$all_nodes"|grep -v "$master_name")"
-  else
-    die "Empty list of nodes supplied"
-  fi
-
-  echo -e "$only_slaves"
 }
 
 
@@ -164,6 +147,7 @@ execute_drill(){
 
   local drill_cmd="$(get_drill_cmd) $cmd"
   #caused benchmark not to start, probably not enough ressources (have to test outside VMs)
+  # TODO Check if monitor works on real cluster
   # Start metrics monitor (if needed)
 #  if [ "$time_exec" ] ; then
 #    save_disk_usage "BEFORE"
@@ -173,32 +157,28 @@ execute_drill(){
 
   logger "DEBUG: DRILL command:\n$drill_cmd"
 
+  # was needed for ZK
+  # TODO Check if still necessary
   export JAVA_HOME="$(get_java_home)"
 
+  # starting ZK outside causes ZK not to launch properly - drillbits don't manage to get a connection
   start_zookeeper
   logger "INFO: Wait 120 seconds to get server started..."
   sleep 120
 
-
+  # Checking the log files of all drillbits - used to debug
   #$DSH "cat $BENCH_DRILL_DIR/log/drillbit.out"
+
+  #Checking the config files - used to debug
   #$DSH "cat $BENCH_DRILL_DIR/conf/drill-override.conf"
+
+  #Just a simple Check if drillbits are ready
   $DSH "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh status"
-  #ping -c30 vagrant-99-01:
+
+  #need to set hive plugin here, sometimes still causes plugin not to update, needs further testing
+  set_hive_plugin
+
   # Run the command and time it
-  #echo 'select * from sys.`memory`;' > test.sql
-  #$(get_local_apps_path)/${DRILL_VERSION}/bin/sqlline -u jdbc:drill:zk:vagrant-99-00:2181 -f test.sql
-  #$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-conf
-  #curl -X POST -H "Content-Type: application/json" -d '{"name":"myplugin", "config": {"type": "file", "enabled": false, "connection": "file:///", "workspaces": { "root": { "location": "/", "writable": false, "defaultInputFormat": null}}, "formats": null}}' http://localhost:8047/storage/myplugin.json
-
-
-
-  #curl -X POST -H "Content-Type: application/json" -d '{"name":"hive", "config": {"type": "hive", "enabled": true,"configProps": {"hive.metastore.uris": "thrift://vagrant-99-00:9083","hive.metastore.warehouse.dir": "/tmp/drill_hive_wh","hive.metastore.sasl.enabled": "false"}}}' http://localhost:8047/storage/hive.json
-
-  #curl http://localhost:8047/storage.json
-  #curl http://localhost:8047/storage/hive.json
-  #curl http://localhost:8047/storage/myplugin.json
-
-  #bash $(get_local_apps_path)/${DRILL_VERSION}/bin/drill-embedded
   time_cmd_master "$drill_cmd" "$time_exec"
 
   # Stop metrics monitors and save bench (if needed)
@@ -217,6 +197,9 @@ get_drill_cmd() {
   export JAVA_HOME="$(get_java_home)"
 
   drill_exports="$(get_drill_exports)"
+
+  #currently hardcoded for the ZK that launches on main node
+  #TODO making it possible to change ZK address
   drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/sqlline -u jdbc:drill:zk:vagrant-99-00:2181 "
   echo -e "$drill_cmd"
 }
@@ -230,7 +213,7 @@ save_drill() {
   save_hadoop "$bench_name"
   }
 
-  #set hive plugin for drill
+  #set hive plugin for drill with REST api
 set_hive_plugin(){
   curl -X POST -H "Content-Type: application/json" -d '{"name":"hive", "config": {"type": "hive", "enabled": true,"configProps": {"hive.metastore.uris": "thrift://vagrant-99-00:9083","hive.metastore.warehouse.dir": "/tmp/drill_hive_wh","hive.metastore.sasl.enabled": "false"}}}' http://localhost:8047/storage/hive.json
 

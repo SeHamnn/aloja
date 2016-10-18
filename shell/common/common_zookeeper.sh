@@ -8,6 +8,7 @@ set_hadoop_requires
 #set_zookeeper_requires
 
 # Sets the required files to download/copy
+# TODO setup own mirror for zookeeper download
 set_zookeeper_requires() {
   [ ! "$ZOOKEEPER_VERSION" ] && die "No DRILL_VERSION specified"
 
@@ -45,14 +46,10 @@ start_zookeeper(){
   local exports="$(get_zookeeper_exports) $zookeeper_exports"
   logger "DEBUG: zk:\n$exports"
 
+  #currently hardcoded for zookeeper config
+  # TODO implement real way to implement ZK config
   cp $(get_base_configs_path)/zookeeper_conf/zoo.cfg $zk_home/conf/zoo.cfg
   $zk_home/bin/zkServer.sh restart
-  #$zk_home/bin/zkCli.sh -server 127.0.0.1:2181
-  #$zk_home/bin/zkServer.sh status
-  #echo stat | nc 127.0.0.1 2181
-  #echo mntr | nc 127.0.0.1 2181
-  #echo isro  | nc 127.0.0.1 2181
-
 
 }
 
