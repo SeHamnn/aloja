@@ -176,7 +176,9 @@ execute_drill(){
   $DSH "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh status"
 
   #need to set hive plugin here, sometimes still causes plugin not to update, needs further testing
-  set_hive_plugin
+  #set_hive_plugin
+  #curl -X POST -H "Content-Type: application/json" -d '{"name":"hive", "config": {"type": "hive", "enabled": true,"configProps": {"hive.metastore.uris": "thrift://vagrant-99-00:9083","hive.metastore.warehouse.dir": "/tmp/drill_hive_wh","hive.metastore.sasl.enabled": "false"}}}' http://localhost:8047/storage/hive.json
+
 
   # Run the command and time it
   time_cmd_master "$drill_cmd" "$time_exec"
@@ -200,7 +202,7 @@ get_drill_cmd() {
 
   #currently hardcoded for the ZK that launches on main node
   #TODO making it possible to change ZK address
-  drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/sqlline -u jdbc:drill:zk:vagrant-99-00:2181 "
+  drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-conf "
   echo -e "$drill_cmd"
 }
 
