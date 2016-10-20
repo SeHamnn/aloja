@@ -201,7 +201,7 @@ get_drill_cmd() {
   drill_exports="$(get_drill_exports)"
 
   #currently hardcoded for the ZK that launches on main node
-  #TODO making it possible to change ZK address
+  #the zk is defined in the config file drill-override
   drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-conf "
   echo -e "$drill_cmd"
 }
