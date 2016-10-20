@@ -137,8 +137,8 @@ benchmark_test(){
   start_drill
   local show_databases="use sys;"
   local local_file_path="$(create_local_file "$bench_name.sql" "$show_databases")"
-  #currently no sql file or sql statement, opens up drill shell to enter them manually
-  execute_drill "$bench_name" '-e "use sys;"' "time"
+  #currently no sql file or sql statement, opens up drill shell to enter them manually for testing purposes
+  execute_drill "$bench_name" "" "time"
 
 }
 
