@@ -22,4 +22,10 @@
     <value>##DATABASE_DRIVER_NAME##</value>
   </property>
 
+  <property>
+    <name>javax.jdo.option.ConnectionURL</name>
+    <value>jdbc:derby:;databaseName=/scratch/meta/metastore_db;create=true</value>
+    <description>JDBC connect string for a JDBC metastore</description>
+  </property>
+
 </configuration>
