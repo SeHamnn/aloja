@@ -21,6 +21,7 @@ benchmark_suite_cleanup() {
   clean_hadoop
 }
 
+
 benchmark_drill-test() {
   local bench_name="${FUNCNAME[0]##*benchmark_}"
   logger "INFO: Running $bench_name"

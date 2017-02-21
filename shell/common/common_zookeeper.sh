@@ -29,7 +29,6 @@ export ZOOKEEPER_HOME='$(get_local_apps_path)/${ZOOKEEPER_VERSION}';
 export ZOOKEEPER_CONF_DIR=$(get_local_apps_path)/${ZOOKEEPER_VERSION}/conf;
 "
 
-
   echo -e "$to_export\n"
 }
 

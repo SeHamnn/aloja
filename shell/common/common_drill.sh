@@ -209,7 +209,6 @@ get_drill_cmd() {
   echo -e "$drill_cmd"
 }
 
-
 # $1 bench name
 save_drill() {
   logger "WARNING: missing to implement a proper save_drill()"

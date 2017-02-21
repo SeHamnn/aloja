@@ -59,6 +59,7 @@ benchmark_suite_cleanup() {
   clean_hadoop
 }
 
+
 get_tpch_exports() {
   local to_export
 

@@ -209,6 +209,7 @@ benchmark_hiving() {
   execute_hive "$bench_name" '' "time"
 }
 
+
 benchmark_suite_cleanup() {
   clean_hadoop
   logger "INFO: Stopping HiveServer2"
