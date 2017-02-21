@@ -7,7 +7,7 @@ set_drill_requires
 BENCH_REQUIRED_FILES["hivebench"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/hivebench.tar.gz"
 
 #BENCH_REQUIRED_FILES["tpch-hive"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/tpch-hive.tar.gz"
-[ ! "$BENCH_LIST" ] && BENCH_LIST="datagen aggregation hiving"
+[ ! "$BENCH_LIST" ] && BENCH_LIST="datagen aggregation test"
 
 data_location="/hivebench/data"
 hivebench_pages="1200" #hivebench default 120000000
@@ -140,13 +140,6 @@ benchmark_test(){
   "
   local local_file_path="$(create_local_file "$bench_name.sql" "$show_databases")"
   #currently no sql file or sql statement, opens up drill shell to enter them manually for testing purposes
-  execute_drill "$bench_name" "-f '$local_file_path'" "time"
+  execute_drill "$bench_name" "" "time"
 
-}
-
-benchmark_hiving() {
-  local bench_name="${FUNCNAME[0]##*benchmark_}"
-  logger "INFO: Running $bench_name"
-
-  execute_hive "$bench_name" '' "time"
 }
