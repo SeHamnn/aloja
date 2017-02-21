@@ -40,10 +40,10 @@ set_hadoop_requires() {
   set_hadoop_config_folder
 
   # measure number of mappers and reducers
-  BENCH_PERF_MONITORS+=" MapRed"
+  [ ! "$ALOJA_FAST_MODE" ] && BENCH_PERF_MONITORS+=" MapRed JavaStat"
 }
 
-# Helper to print a line with Hadoop requiered exports
+# Helper to print a line with Hadoop required exports
 get_hadoop_exports() {
 
  if [ "$clusterType" == "PaaS" ]; then
@@ -140,7 +140,7 @@ get_hadoop_conf_dir() {
     dir="${dir:2}" #remove leading \,
     echo -e "$dir"
   else
-    die "Cannot get disk config for specified disk $1"
+    die "Cannot get disk config for specified disk $1. Disks: $disks"
   fi
 }
 
@@ -155,10 +155,7 @@ initialize_hadoop_vars() {
   HADOOP_CONF_DIR="/etc/hadoop/conf"
   HADOOP_EXPORTS=""
 
-  # This setting should not been here... fixing it.
-  #HDD=$BENCH_LOCAL_DIR
-
-  update_traps "stop_monit;" "update_logger"
+  #update_traps "stop_monit;" "update_logger"
  else
   [ ! "$HDD" ] && die "HDD var not set!"
 
@@ -167,29 +164,21 @@ initialize_hadoop_vars() {
   HADOOP_CONF_DIR="$HDD/hadoop_conf"
   HADOOP_EXPORTS="$(get_hadoop_exports)"
 
-#  if [ ! "$HADOOP_VERSION" ] ; then
-#    if [ "$HADOOP_VERSION" == "hadoop1" ]; then
-#      HADOOP_VERSION="hadoop-1.0.3"
-#    elif [ "$HADOOP_VERSION" == "hadoop2" ] ; then
-#      HADOOP_VERSION="hadoop-2.6.0"
-#    fi
-#  fi
-
   # Use instrumented version of Hadoop
   if [ "$INSTRUMENTATION" == "1" ] ; then
     HADOOP_VERSION="${HADOOP_VERSION}-instr"
   fi
 
-  if [ ! "$BENCH_LEAVE_SERVICES" ] ; then
-    #make sure all spawned background jobs and services are stoped or killed when done
+#  if [ ! "$BENCH_LEAVE_SERVICES" ] ; then
+    #make sure all spawned background jobs and services are stopped or killed when done
     if [ "$INSTRUMENTATION" == "1" ] ; then
-      update_traps "stop_hadoop; stop_monit; stop_sniffer;" "update_logger"
+      update_traps "stop_hadoop; stop_sniffer;" "update_logger"
     else
-      update_traps "stop_hadoop; stop_monit;" "update_logger"
+      update_traps "stop_hadoop; " "update_logger"
     fi
-  else
-    update_traps "echo 'WARNING: leaving services running as requested (stop manually).';"
-  fi
+#  else
+#      update_traps "logger 'WARNING: leaving Hadoop services running as requested (stop manually).';"
+#  fi
 
  fi
 }
@@ -331,6 +320,19 @@ prepare_hadoop_config(){
   logger "INFO: Preparing Hadoop run specific config"
   $DSH "mkdir -p $HDD/hadoop_conf; cp -r $(get_local_configs_path)/$(get_hadoop_config_folder)/* '$HDD/hadoop_conf';"
 
+  # Create datanodes socket file with required permissions
+  # see http://www.ibm.com/support/knowledgecenter/STXKQY_4.2.0/com.ibm.spectrum.scale.v4r2.adv.doc/bl1adv_ConfigureShortCircuitRead.htm
+  local short_circuit
+  if [ ! "$noSudo" ] ; then
+    local dn_socket="/var/run/aloja-run/hadoop_socket_$PORT_PREFIX"
+    local test_action="$($DSH "sudo mkdir -p '$dn_socket' && sudo chown $userAloja '$dn_socket' && sudo chmod 750 '$dn_socket' && rm -f '$dn_socket/dn_socket' && echo '$testKey';")"
+    if [[ "$test_action" == *"$testKey"* ]] ; then
+      short_circuit="1"
+    else
+      #log_WARN
+      die "Cannot create/set permissions for datanodes short circuit at: $dn_socket. Test output: $test_action"
+    fi
+  fi
 
   # Get the values
   subs=$(get_hadoop_substitutions)
@@ -343,8 +345,24 @@ $(get_perl_exports)
 /usr/bin/perl -i -pe \"$subs\" $HADOOP_CONF_DIR/*.properties
 
 echo -e '$master_name' > $HADOOP_CONF_DIR/masters;
-echo -e \"$slaves\" > $HADOOP_CONF_DIR/slaves;"
+echo -e \"$slaves\" > $HADOOP_CONF_DIR/slaves;
 
+if [ '$short_circuit' ] ; then
+  /usr/bin/perl -0777 -i -pe 's{<!-- ##SHORT_CIRCUIT## -->}{
+<property>
+  <name>dfs.client.read.shortcircuit</name>
+  <value>true</value>
+</property>
+<property>
+  <name>dfs.domain.socket.path</name>
+  <value>$dn_socket/dn_socket</value>
+</property>
+<property>
+  <name>dfs.client.read.shortcircuit.streams.cache.size</name>
+  <value>4096</value>
+</property>}g' $HADOOP_CONF_DIR/hdfs-site.xml;
+fi
+"
 
   # Extra config for v2
   if [ "$(get_hadoop_major_version)" == "2" ]; then
@@ -501,7 +519,7 @@ restart_hadoop(){
   if [ "$clusterType" != "PaaS" ]; then
     logger "INFO: Restart Hadoop"
     #just in case stop all first
-    stop_hadoop
+    stop_hadoop "" "$BENCH_LEAVE_SERVICES"
 
     if [ "$(get_hadoop_major_version)" == "1" ]; then
       $DSH_MASTER "$HADOOP_EXPORTS $BENCH_HADOOP_DIR/bin/start-all.sh"
@@ -557,7 +575,7 @@ restart_hadoop(){
         fi
       elif [ "$i" == "180" ] && [[ -z $1 ]] ; then
         #try to restart hadoop deleting files and prepare again files
-        logger "INFO: Reseting config to retry DELETE_HDFS WAS SET TO: $DELETE_HDFS"
+        logger "INFO: Resetting config to retry DELETE_HDFS WAS SET TO: $DELETE_HDFS"
         DELETE_HDFS="1"
         restart_hadoop no_retry
       elif [ "$i" == "120" ] ; then
@@ -575,7 +593,7 @@ restart_hadoop(){
 }
 
 get_job_list() {
-  echo -e "$(execute_hadoop_new "$bench_name" "hadoop job -list|egrep 'job_[0-9_]+'|cut -d' ' -f2")"
+  echo -e "$(execute_hadoop_new "$bench_name" "hadoop job -list|egrep \"job_[0-9_]+\"|cut -d\" \" -f2")"
 }
 
 hadoop_kill_jobs() {
@@ -591,15 +609,18 @@ hadoop_kill_jobs() {
 }
 
 # Stops Hadoop and checks for open ports
-# $1 retry (to prevent recursion)
+# $1 dont retry, to prevent recursion (optional)
+# $2 force stop, for use at restart (useful for -S)
 stop_hadoop(){
   local dont_retry="$1"
+  local force_stop="$2"
 
-  if [ "$clusterType=" != "PaaS" ] && [ "$DELETE_HDFS" == "1" ]; then
+  #if [ "$clusterType=" != "PaaS" ] && [ "$DELETE_HDFS" == "1" ]; then
+  if [ "$clusterType=" != "PaaS" ] && [[ ! "$BENCH_LEAVE_SERVICES" || "$force_stop" ]] && [ "$DELETE_HDFS" == "1" ] ; then
     if [ ! "$dont_retry" ] ; then
-      logger "INFO: Stop Hadoop"
+      logger "INFO: Stopping Hadoop"
     else
-      logger "INFO: Stop Hadoop (retry)"
+      logger "INFO: Stopping Hadoop (retry)"
     fi
 
     if [ "$(get_hadoop_major_version)" == "1" ]; then
@@ -618,11 +639,11 @@ wait"
     local hadoop_ports="$(get_hadoop_ports)"
     local open_port=""
 
-    # First tell all ports toguether to save time
+    # First tell all ports together to save time
     local test_all_cmd
     local all_ports
     for port in $hadoop_ports ; do
-      test_all_cmd+="lsof -i tcp:$port || "
+      test_all_cmd+="lsof -i tcp:$port -s tcp:LISTEN || "
       all_ports+="$port "
     done
     logger "DEBUG: Testing for open ports in: $all_ports"
@@ -651,15 +672,16 @@ wait"
       #logger "ERROR: Please manually stop running Hadoop instances"
       die "Please manually stop running Hadoop instances"
     elif [ "$open_port" ] && [ ! "$retry" ] ; then
-      stop_hadoop "dont_retry"
+      stop_hadoop "dont_retry" "$BENCH_LEAVE_SERVICES"
     else
       logger "INFO: Stop Hadoop ready"
     fi
   elif [ "$clusterType=" == "PaaS" ] ; then
-    logger "INFO: In PaaS mode, not stoping Hadoop. But killing remaining jobs..."
+    log_WARN "In PaaS mode, not stopping Hadoop. But killing remaining jobs..."
     hadoop_kill_jobs
   else
-    logger "WARNING: Not stopping Hadoop (as requested with -N)"
+    log_WARN "Not stopping Hadoop (as requested with -S or -N)."
+    #hadoop_kill_jobs
   fi
 }
 
@@ -740,7 +762,9 @@ $(get_hadoop_exports)"
 }
 
 # Returns the the path to the hadoop binary with the proper exports
+# $1 dont include exports
 get_hadoop_cmd() {
+  local dont_include_exports="$1"
   local hadoop_exports
   local hadoop_cmd
   local hadoop_bin
@@ -750,18 +774,24 @@ get_hadoop_cmd() {
     hadoop_exports=""
     hadoop_bin="hadoop"
   else
-    #TODO refactor
-    if [ "$EXECUTE_HIBENCH" ] ; then
-      hadoop_exports="$(get_HiBench_exports)
+    if [ ! "$dont_include_exports" ] ; then
+      #TODO refactor
+      if [ "$EXECUTE_HIBENCH" ] ; then
+        hadoop_exports="$(get_HiBench_exports)
 $(get_hadoop_exports)"
-    else
-      hadoop_exports="$(get_hadoop_exports)"
+      else
+        hadoop_exports="$(get_hadoop_exports)"
+      fi
     fi
 
     hadoop_bin="$BENCH_HADOOP_DIR/bin/hadoop"
   fi
 
-  hadoop_cmd="$hadoop_exports\n$hadoop_bin"
+  if [ "$hadoop_exports" ] ; then
+    hadoop_cmd="$hadoop_exports\n$hadoop_bin"
+  else
+    hadoop_cmd="$hadoop_bin"
+  fi
 
   echo -e "$hadoop_cmd"
 }
@@ -780,23 +810,15 @@ execute_hadoop_new(){
 
   local hadoop_cmd="${chdir}$(get_hadoop_cmd) $cmd"
 
-  # Start metrics monitor (if needed)
   if [ "$time_exec" ] ; then
-    save_disk_usage "BEFORE"
-    restart_monit
-    set_bench_start "$bench"
+    execute_master "$bench: HDFS capacity before" "${chdir}$(get_hadoop_cmd) fs -df"
   fi
 
-  logger "DEBUG: Hadoop command:\n$hadoop_cmd"
-
   # Run the command and time it
-  time_cmd_master "$hadoop_cmd" "$time_exec"
+  execute_master "$bench" "$hadoop_cmd" "$time_exec" "dont_save"
 
-  # Stop metrics monitors and save bench (if needed)
   if [ "$time_exec" ] ; then
-    set_bench_end "$bench"
-    stop_monit
-    save_disk_usage "AFTER"
+    execute_master "$bench: HDFS capacity after" "${chdir}$(get_hadoop_cmd) fs -df"
     save_hadoop "$bench"
   fi
 }
@@ -815,6 +837,16 @@ hadoop_delete_path() {
   fi
 
   execute_hadoop_new "$bench_name: deleting $path_to_delete" "fs $delete_cmd $path_to_delete"
+}
+
+# Copy file to HDFS
+# $1 Destiny folder
+# $2 Origin local folder
+hadoop_copy_hdfs() {
+  logger "INFO: Coping $2 from local to $1 in HDFS"
+  $DSH_MASTER "$HADOOP_EXPORTS $BENCH_HADOOP_DIR/bin/hadoop fs -mkdir $1"
+  $DSH_MASTER "$HADOOP_EXPORTS $BENCH_HADOOP_DIR/bin/hadoop fs -copyFromLocal $2 $1"
+  $DSH_MASTER "$HADOOP_EXPORTS $BENCH_HADOOP_DIR/bin/hadoop fs -ls $1"
 }
 #
 #
@@ -924,16 +956,16 @@ save_hadoop() {
 	    hdfs dfs -rm -r "/mr-history"
 	    hdfs dfs -expunge
     fi
-    $DSH "cp -r /var/log/hadoop $JOB_PATH/$bench_name_num/ 2> /dev/null"
+    $DSH "cp -ru /var/log/hadoop $JOB_PATH/$bench_name_num/ 2> /dev/null"
   else
     #we cannot move hadoop files
     #take into account naming *.date when changing dates
     #$DSH "cp $HDD/logs/hadoop-*.{log,out}* $JOB_PATH/$bench_name_num/"
     #$DSH "cp -r ${BENCH_HADOOP_DIR}/logs/* $JOB_PATH/$bench_name_num/ 2> /dev/null"
     if [ "$BENCH_LEAVE_SERVICES" ] ; then
-      $DSH "cp -r $HDD/hadoop_logs/* $JOB_PATH/$bench_name_num/ " #2> /dev/null
+      $DSH "cp -ru $HDD/hadoop_logs/* $JOB_PATH/$bench_name_num/ " #2> /dev/null
     else
-      $DSH "mv $HDD/hadoop_logs/* $JOB_PATH/$bench_name_num/ " #2> /dev/null
+      $DSH "mv '$HDD/hadoop_logs/*' $JOB_PATH/$bench_name_num/ " #2> /dev/null
     fi
   fi
 
@@ -941,12 +973,12 @@ save_hadoop() {
   if [[ "$(get_hadoop_major_version)" == "2" && "$clusterType=" != "PaaS" ]]; then
     ##Copy history logs
     logger "INFO: Getting mapreduce job history logs from HDFS"
-    $DSH_MASTER "$HADOOP_EXPORTS $BENCH_HADOOP_DIR/bin/hdfs dfs -copyToLocal $HDD/logs/history $JOB_PATH/$bench_name_num"
-    $DSH_MASTER "$HADOOP_EXPORTS $BENCH_HADOOP_DIR/bin/hdfs dfs -rm -r $HDD/logs/history"
+    $DSH_MASTER "$HADOOP_EXPORTS $BENCH_HADOOP_DIR/bin/hdfs dfs -copyToLocal $HDD/logs/history $JOB_PATH/$bench_name_num" 2> /dev/null
+    $DSH_MASTER "$HADOOP_EXPORTS $BENCH_HADOOP_DIR/bin/hdfs dfs -rm -r $HDD/logs/history" 2> /dev/null
     ##Copy jobhistory daemon logs
     logger "INFO: Moving jobhistory daemon logs to logs dir"
-    $DSH_MASTER "mv $BENCH_HADOOP_DIR/logs/*.out* $HDD/hadoop_logs"
-    $DSH_MASTER "mv $BENCH_HADOOP_DIR/logs/*.log $HDD/hadoop_logs"
+    $DSH_MASTER "mv $BENCH_HADOOP_DIR/logs/*.out* $HDD/hadoop_logs" 2> /dev/null
+    $DSH_MASTER "mv $BENCH_HADOOP_DIR/logs/*.log $HDD/hadoop_logs" 2> /dev/null
     #logger "INFO: Deleting history files after copy to local"
 
 #    $DSH_MASTER "$HADOOP_EXPORTS $BENCH_HADOOP_DIR/bin/hdfs dfs -rm -r /tmp/hadoop-yarn/staging/history"

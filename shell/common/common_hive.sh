@@ -9,18 +9,30 @@ set_hive_requires() {
   if [ "$clusterType" != "PaaS" ]; then
     if [ "$(get_hadoop_major_version)" == "2" ]; then
       BENCH_REQUIRED_FILES["$HIVE_VERSION"]="http://www-us.apache.org/dist/hive/stable/$HIVE_VERSION.tar.gz"
+      if [ "$HIVE_ENGINE" == "tez" ]; then
+        source_file "$ALOJA_REPO_PATH/shell/common/common_tez.sh"
+        set_tez_requires
+      fi
     else
       BENCH_REQUIRED_FILES["$HIVE_VERSION"]="http://www-us.apache.org/dist/hive/stable/$HIVE_VERSION.tar.gz"
       #BENCH_REQUIRED_FILES["apache-hive-0.13.1-bin"]="https://archive.apache.org/dist/hive/hive-0.13.1/apache-hive-0.13.1-bin.tar.gz"
     fi
   fi
+
+  if [ ! "$BB_ZOOKEEPER_QUORUM" ]; then #TODO need to add on-premise support
+    HIVE_MAJOR_VERSION="1"
+  else
+    HIVE_MAJOR_VERSION="2"
+  fi
+
   #also set the config here
   BENCH_CONFIG_FOLDERS="$BENCH_CONFIG_FOLDERS hive1_conf_template"
 }
 
-# Helper to print a line with requiered exports
+# Helper to print a line with required exports
 get_hive_exports() {
   local to_export
+  local tez_exports
 
  if [ "$clusterType" == "PaaS" ]; then
   : # Empty
@@ -28,13 +40,16 @@ get_hive_exports() {
     to_export="$(get_hadoop_exports)
 export HIVE_VERSION='$HIVE_VERSION';
 export HIVE_HOME='$(get_local_apps_path)/${HIVE_VERSION}';
-export HIVE_CONF_DIR=$HIVE_CONF_DIR;
-"
+export HIVE_CONF_DIR='$HIVE_CONF_DIR';"
 
     if [ "$EXECUTE_TPCH" ]; then
       to_export="${to_export} export TPCH_HOME='$(get_local_apps_path)/$TPCH_DIR';"
     fi
 
+    if [ "$HIVE_ENGINE" == "tez" ]; then
+      tez_exports=$(get_tez_exports)
+      to_export+="${tez_exports}"
+    fi
     echo -e "$to_export\n"
   fi
 }
@@ -73,23 +88,11 @@ execute_hive(){
 
   local hive_cmd="$(get_hive_cmd) $cmd"
 
-  # Start metrics monitor (if needed)
-  if [ "$time_exec" ] ; then
-    save_disk_usage "BEFORE"
-    restart_monit
-    set_bench_start "$bench"
-  fi
-
-  logger "DEBUG: Hive command:\n$hive_cmd"
-
   # Run the command and time it
-  time_cmd_master "$hive_cmd" "$time_exec"
+  execute_master "$bench" "$hive_cmd" "$time_exec" "dont_save"
 
   # Stop metrics monitors and save bench (if needed)
   if [ "$time_exec" ] ; then
-    set_bench_end "$bench"
-    stop_monit
-    save_disk_usage "AFTER"
     save_hive "$bench"
   fi
 }
@@ -99,26 +102,63 @@ initialize_hive_vars() {
   BENCH_CONFIG_FOLDERS="$BENCH_CONFIG_FOLDERS hive_conf_template"
 
   if [ "$clusterType" == "PaaS" ]; then
-    HIVE_HOME="/usr/bin/hive"
+    HIVE_HOME="/usr"
     HIVE_CONF_DIR="/etc/hive/conf"
+    [ ! "$HIVE_SETTINGS_FILE" ] && HIVE_SETTINGS_FILE="$HDD/hive_conf/hive.settings.BB_PaaS.sql"
   else
     HIVE_HOME="$(get_local_apps_path)/${HIVE_VERSION}"
     HIVE_CONF_DIR="$HDD/hive_conf"
     # Only set a default hive.settings when not in PaaS
-    [ ! "$HIVE_SETTINGS_FILE" ] && HIVE_SETTINGS_FILE="$HDD/hive_conf/hive.settings"
+    if [ "$BENCH_SUITE" == "BigBench" ]; then
+      [ ! "$HIVE_SETTINGS_FILE" ] && HIVE_SETTINGS_FILE="$HDD/hive_conf/hive.settings.BB.sql"
+    else
+      [ ! "$HIVE_SETTINGS_FILE" ] && HIVE_SETTINGS_FILE="$HDD/hive_conf/hive.settings"
+    fi
+
+    if [ "$HIVE_ENGINE" == "tez" ]; then
+      initialize_tez_vars
+      prepare_tez_config
+    fi
   fi
 }
 
 # Sets the substitution values for the hive config
 get_hive_substitutions() {
+  local database_driver
+  local database_driver_name
+  local url
+
+  if [ "$USE_EXTERNAL_DATABASE" == "true" ]; then
+    database_driver="$(get_database_driver_path_colon)"
+    database_driver_name="$(get_database_driver_name)"
+    url=$(get_database_connection_url)
+  else
+    database_driver_name="org.apache.derby.jdbc.EmbeddedDriver"
+    url="jdbc:derby:;databaseName=$(get_local_bench_path)/aplic/bigbench_metastore_db;create=true"
+  fi
 
   #generate the path for the hadoop config files, including support for multiple volumes
   HDFS_NDIR="$(get_hadoop_conf_dir "$DISK" "dfs/name" "$PORT_PREFIX")"
   HDFS_DDIR="$(get_hadoop_conf_dir "$DISK" "dfs/data" "$PORT_PREFIX")"
 
+  # Give Hive 10% of container mem for hive.auto.convert.join.noconditionaltask.size
+  JOIN_HIVE="$(echo "${MAPS_MB}*0.05" | bc -l)"
+  JOIN_HIVE="$(echo "${JOIN_HIVE}*1000000" | bc -l)"
+  JOIN_HIVE="$(printf "%.0f" $JOIN_HIVE)"
+
+  CONTAINER_80="$(echo "${MAPS_MB}*0.80" | bc -l)"
+  CONTAINER_80="$(printf "%.0f" $CONTAINER_80)"
+
+  CONTAINER_40="$(echo "${MAPS_MB}*0.40" | bc -l)"
+  CONTAINER_40="$(printf "%.0f" $CONTAINER_40)"
+
+  CONTAINER_10="$(echo "${MAPS_MB}*0.10" | bc -l)"
+  CONTAINER_10="$(printf "%.0f" $CONTAINER_10)"
+
   cat <<EOF
 s,##JAVA_HOME##,$(get_java_home),g;
 s,##HADOOP_HOME##,$BENCH_HADOOP_DIR,g;
+s,##HIVE_CONF_DIR##,$HIVE_CONF_DIR,g;
 s,##JAVA_XMS##,$JAVA_XMS,g;
 s,##JAVA_XMX##,$JAVA_XMX,g;
 s,##JAVA_AM_XMS##,$JAVA_AM_XMS,g;
@@ -135,6 +175,10 @@ s,##MAX_REDS##,$MAX_REDS,g;
 s,##IFACE##,$IFACE,g;
 s,##IO_FACTOR##,$IO_FACTOR,g;
 s,##IO_MB##,$IO_MB,g;
+s,##JOIN_HIVE##,$JOIN_HIVE,g;
+s,##CONTAINER_80##,$CONTAINER_80,g;
+s,##CONTAINER_40##,$CONTAINER_40,g;
+s,##CONTAINER_10##,$CONTAINER_10,g;
 s,##PORT_PREFIX##,$PORT_PREFIX,g;
 s,##IO_FILE##,$IO_FILE,g;
 s,##BLOCK_SIZE##,$BLOCK_SIZE,g;
@@ -147,6 +191,11 @@ s,##REDUCES_MB##,$REDUCES_MB,g;
 s,##AM_MB##,$AM_MB,g;
 s,##BENCH_LOCAL_DIR##,$BENCH_LOCAL_DIR,g;
 s,##HDD##,$HDD,g;
+s,##HIVE_ENGINE##,$HIVE_ENGINE,g;
+s,##HIVE_JOINS##,$HIVE_JOINS,g;
+s,##DATABASE_DRIVER##,$database_driver,g;
+s,##DATABASE_DRIVER_NAME##,$database_driver_name,g;
+s,##URL##,$url,g
 EOF
 }
 
@@ -164,6 +213,8 @@ prepare_hive_config() {
     #just in case
     time_cmd_master "sudo hadoop fs -chmod -R 777 /user/hive/ /hive/warehouse/"
 
+    $DSH "mkdir -p $(get_hive_conf_dir); cp -r $(get_local_configs_path)/hive1_conf_template/hive.settings.BB_PaaS.sql $(get_hive_conf_dir);"
+
   else
     logger "INFO: Preparing Hive run specific config"
     $DSH "mkdir -p $(get_hive_conf_dir) $HDD/hive_logs; cp -r $(get_local_configs_path)/hive1_conf_template/* $(get_hive_conf_dir);"
@@ -175,8 +226,7 @@ prepare_hive_config() {
     $DSH "
 $(get_perl_exports)
 /usr/bin/perl -i -pe \"$subs\" $HIVE_SETTINGS_FILE;
-/usr/bin/perl -i -pe \"$subs\" $(get_hive_conf_dir)/*.xml;
-/usr/bin/perl -i -pe \"$subs\" $(get_hive_conf_dir)/*.properties;"
+/usr/bin/perl -i -pe \"$subs\" $(get_hive_conf_dir)/*;"
 
 #    if [ ! -z "$MAPS_MB" ]; then
 #        $DSH "echo 'set mapreduce.map.memory.mb=${MAPS_MB};' >> ${HIVE_SETTINGS_FILE_PATH}"
@@ -218,7 +268,7 @@ save_hive() {
   # Save hadoop logs
   # Hadoop 2 saves job history to HDFS, get it from there
   if [ "$clusterType" == "PaaS" ]; then
-    $DSH "cp -r /var/log/hive $JOB_PATH/$bench_name_num/hive_logs/" #2> /dev/null
+    $DSH "mv -r /var/log/hive $JOB_PATH/$bench_name_num/hive_logs/" #2> /dev/null
 
     # Save Hive conf
     $DSH_MASTER "cd /etc/hive; tar -cjf $JOB_PATH/hive_conf.tar.bz2 conf"
@@ -236,13 +286,24 @@ save_hive() {
   logger "INFO: Compresing and deleting hadoop configs for $bench_name_num"
 
   $DSH_MASTER "
+
 cd $JOB_PATH;
 if [ \"\$(ls conf_* 2> /dev/null)\" ] ; then
   tar -cjf $JOB_PATH/hadoop_host_conf.tar.bz2 conf_*;
   rm -rf conf_*;
 fi
 "
+  # save tez
+  if [ "$HIVE_ENGINE" == "tez" ]; then
+    save_tez "$bench_name"
+  fi
 
   # save hadoop and defaults
   save_hadoop "$bench_name"
+}
+
+clean_hive() {
+  if [ "$USE_EXTERNAL_DATABASE" == "true" ]; then
+    stop_derby
+  fi
 }

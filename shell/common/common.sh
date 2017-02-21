@@ -11,21 +11,32 @@ fi
 startTime="$(date +%s)"
 testKey="###OK###"
 
-[ ! "$PARENT_PID" ] && PARENT_PID=$$ #for killing the process from subshells
-EXTRA_TRAP_CMDS="" #add to this global extra commands for the trap cleanup (e.g., stop services)
-DONT_RETRY_TRAP="" #prevent trap loops
+[ ! "$PARENT_PID" ] && PARENT_PID=$$ #for killing the process from sub shells
+EXTRA_TRAP_CMDS="" # add to this global extra commands for the trap cleanup (e.g., stop services)
+DONT_RETRY_TRAP="" # prevent trap loops
+declare -A BENCH_LOGGER_PIDS # to kill previous log sub processes
 
 #common funtions
 
-#$1 message $2 severity $3 log to file
+# Main logging function
+# $1 message
+# $2 severity (optional)
+# $3 log to file (optional)
 logger() {
-  local log_file="aloja-deploy.log"
+  local message="$1"
+  local severity="$2"
+  local log_to_file="$3"  
+  local log_file="aloja-deploy.log"  
   local dateTime="$(date +%Y%m%d_%H%M%S)"
   local vm_info
   local to_stderr
 
   if [ "$vm_name" ] ; then
     local vm_info=" $vm_name"
+  fi
+
+  if [ "$severity" ] ; then
+    message="${severity}: $message"
   fi
 
   local output=""
@@ -39,27 +50,71 @@ logger() {
     local cyan="$(tput setaf 6)"
     local white="$(tput setaf 7)"
 
-    if [[ "$1 " == "DEBUG:"* ]] ; then
-      output="${cyan}$dateTime $$${vm_info}: $1${reset}"
-    elif [[ "$1 " == "INFO:"* ]] ; then
-      output="${green}$dateTime $$${vm_info}: $1${reset}"
-    elif [[ "$1 " == "WARNING:"* ]] ; then
-      output="${yellow}$dateTime $$${vm_info}: $1${reset}"
-    elif [[ "$1 " == "ERROR:"* ]] ; then
-      output="${red}$dateTime $$${vm_info}: $1${reset}"
+    if [[ "$message " == "DEBUG:"* ]] ; then
+      output="${cyan}$dateTime $$${vm_info}: $message${reset}"
+    elif [[ "$message " == "INFO:"* ]] ; then
+      output="${green}$dateTime $$${vm_info}: $message${reset}"
+    elif [[ "$message " == "WARNING:"* ]] ; then
+      output="${yellow}$dateTime $$${vm_info}: $message${reset}"
+    elif [[ "$message " == "ERROR:"* ]] ; then
+      output="${red}$dateTime $$${vm_info}: $message${reset}"
     else
-      output="${white}$dateTime $$${vm_info}: $1${reset}"
+      output="${white}$dateTime $$${vm_info}: $message${reset}"
     fi
   # non-interactive (no colors)
   else
-    output="$dateTime $$${vm_info}: $1"
+    output="$dateTime $$${vm_info}: $message"
   fi
 
-  if [ -z "$3" ] ; then
+  if [ -z "$log_to_file" ] ; then
     echo -e "$output"
   else
     echo -e "$output" >> $log_file
   fi
+}
+
+# Shortcut to the logger with severity INFO (new style)
+# $1 message
+# $2 log to file (optional)
+log_INFO() {
+  local message="$1"
+  local log_to_file="$2"
+  logger "$message" "INFO" "$log_to_file"
+}
+
+# Shortcut to the logger with severity WARNING (new style)
+# $1 message
+# $2 log to file (optional)
+log_WARN() {
+  local message="$1"
+  local log_to_file="$2"
+  logger "$message" "WARNING" "$log_to_file"
+}
+
+# Shortcut to the logger with severity DEBUG (new style)
+# $1 message
+# $2 log to file (optional)
+log_DEBUG() {
+  local message="$1"
+  local log_to_file="$2"
+  logger "$message" "DEBUG" "$log_to_file"
+}
+
+# Shortcut to the logger with severity ERROR (new style)
+# $1 message
+# $2 log to file (optional)
+log_ERR() {
+  local message="$1"
+  local log_to_file="$2"
+  logger "$message" "ERROR" "$log_to_file"
+}
+
+
+# Returns a \n separated list of of child pids if any, NOT including the parent
+# $1 parent
+get_pid_tree() {
+  local parent_pid="$1"
+  echo -e "$(pstree -p "$parent_pid" | sed 's/(/\n(/g' | grep '(' | sed 's/(\(.*\)).*/\1/' | tail -n +2)"
 }
 
 # [dangerous] Function that automatically logs all script output to file
@@ -70,20 +125,32 @@ logger() {
 log_all_output() {
   local file_name="$1"
 
+  # First check if we already had the log opened to close it (useful when to updating the traps)
+  [ "${BENCH_LOGGER_PIDS[$file_name]}" ] && {
+    local logger_pids="${BENCH_LOGGER_PIDS["$file_name"]}"
+    kill -9 $logger_pids
+    BENCH_LOGGER_PIDS["$file_name"]="" # Clear the PIDs
+  }
+
   # Restore exec in case we are updating or it has been modified before
   exec &>/dev/tty
+  # Save my current processes
+  local sub_processes_save="$(pgrep -P $$)"
 
   # Remove colors if set - stdbuf is to disable buffering so streams are in order
   if [ "$ALOJA_FORCE_COLORS" ] ; then
     local strip_colors="stdbuf -oL -eL sed -r 's/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g'"
     exec 1> >(setup_traps && tee -a >(eval $strip_colors  >> "$file_name.log") ) \
-         2> >( tee -a >(eval $strip_colors >> "$file_name.err") | \
+         2> >(tee -a >(eval $strip_colors >> "$file_name.err") | \
                tee -a >(eval $strip_colors >> "$file_name.log") >&2)
   # Non-interactive or colors disabled
   else
     exec 1> >(setup_traps && tee -a  "$file_name.log") \
-         2> >( tee -a "$file_name.err" | tee -a "$file_name.log" >&2)
+         2> >(tee -a "$file_name.err" | tee -a "$file_name.log" >&2)
   fi
+
+  local sub_processes_new="$(pgrep -P $$)"
+  BENCH_LOGGER_PIDS["$file_name"]="${sub_processes_new#$sub_processess_save}"
 
   #exec > >(tee -a "$file_name.log") 2>&1
   #touch "$file_name.log" "$file_name.err"
@@ -104,6 +171,10 @@ die() {
 # $1 extra commands to add
 setup_traps(){
   local extra_cmds="$1"
+
+# logger "Attempting to kill the whole (non-ssh) process tree now"
+# kill -9 -- -$$
+
   local trap_cmds="
 ((DONT_RETRY_TRAP++))
 if (( DONT_RETRY_TRAP > 1 )) ; then
@@ -118,10 +189,15 @@ extra_traps;
 jobs_to_kill="$(jobs -p)";
 if (( "$(echo -e "$jobs_to_kill" |wc -l)" > 1 )) ; then
   logger "DEBUG: Attempting to kill -9 remaining process(es): $jobs_to_kill";
-  kill -9 $jobs_to_kill;
+  for pid in $jobs_to_kill; do
+    echo "PID $pid: $(ps -o cmd= -p $pid && kill -9 $pid || echo "already closed")"
+  done
+  #kill -9 $jobs_to_kill;
+  log_INFO "Done controlled exit with signal $signal."
 else
   logger "DEBUG: No processes left, exiting";
 fi
+
 echo -e "\n\n" #to prevent buffering
 exit 1;
 '
@@ -145,17 +221,19 @@ extra_traps() {
 
 # Updates the abnormal exit cleanup process with more commands to execute
 # $1 extra commands
-# $2 update the logger's traps too (optional)
+# $2 update the logger's traps too (optional, but required usually as the logger captures the exit signals)
 update_traps(){
   local extra_cmds="$1"
   local update_logger="$2"
 
-  # Update the globals so that they are not deleted if the function is called again
-  EXTRA_TRAP_CMDS+="$extra_cmds"
-
-  # Setup the traps again
-  setup_traps
-  [ "$update_logger" ] && log_all_output "$JOB_PATH/${0##*/}"
+  # Test first if the code is new
+  if [[ "$EXTRA_TRAP_CMDS" != *"$extra_cmds"* ]] ; then
+    # Update the globals so that they are not deleted if the function is called again
+    EXTRA_TRAP_CMDS="$extra_cmds $EXTRA_TRAP_CMDS"
+    # Setup the traps again
+    setup_traps
+    [ "$update_logger" ] && log_all_output "$JOB_PATH/${0##*/}"
+  fi
 }
 
 # Sources file and prints a log message
@@ -175,7 +253,7 @@ source_file() {
 logger "DEBUG: Loading ${BASH_SOURCE##*/}"
 
 #trasposes new lines to selected string
-#$1 string to traspose $2 traspose
+#$1 string to transpose $2 transpose
 nl2char() {
   local tmp="$(echo -e "$1"|tr "\n" "$2")"
   echo -e "${tmp%?}" #remove trailing $2
@@ -380,4 +458,11 @@ only_alpha() {
 is_number() {
   string="$1"
   [[ $string =~ ^-?[0-9.]+$ ]] && return 0 || return 1
+}
+
+# Strips invalid chars from filename strings
+# $1 string
+safe_file_name() {
+  local file_name="$1"
+  echo -e "$(sed -e 's/[^A-Za-z0-9._-]/_/g' <<< "$file_name")"
 }
