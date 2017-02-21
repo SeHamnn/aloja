@@ -26,7 +26,7 @@ get_drill_config_folder() {
 set_drill_requires() {
 
   [ ! "$DRILL_VERSION" ] && die "No DRILL_VERSION specified"
-  BENCH_REQUIRED_FILES["$DRILL_VERSION"]="http://mirror.yannic-bonenberger.com/apache/drill/drill-1.8.0/$DRILL_VERSION.tar.gz"
+  BENCH_REQUIRED_FILES["$DRILL_VERSION"]="http://apache.lauf-forum.at/drill/drill-1.8.0/$DRILL_VERSION.tar.gz"
 
   #also set the config here
   BENCH_CONFIG_FOLDERS="$BENCH_CONFIG_FOLDERS drill_1.6_conf_template"
@@ -113,11 +113,12 @@ restart_drill(){
     logger "INFO: Restart DRILL"
     #just in case stop all first
     stop_drill
-
+    #$DSH "/scratch/local/aloja-bench_3/apache-drill-1.8.0/bin/drillbit.sh start"
     $DSH "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh start"
     logger "INFO: Drill ready"
   fi
 }
+
 
 # Stops drill and checks for open ports
 # $1 retry (to prevent recursion)
@@ -175,9 +176,11 @@ execute_drill(){
   #Just a simple Check if drillbits are ready
   $DSH "$DRILL_EXPORTS $BENCH_DRILL_DIR/bin/drillbit.sh status"
 
-  #need to set hive plugin here, sometimes still causes plugin not to update, needs further testing
+  #curl http://localhost:8047/storage/hive.json
+
+  #need to set hive plugin here, sometimes causes the benchmark not to finish
   #set_hive_plugin
-  #curl -X POST -H "Content-Type: application/json" -d '{"name":"hive", "config": {"type": "hive", "enabled": true,"configProps": {"hive.metastore.uris": "thrift://vagrant-99-00:9083","hive.metastore.warehouse.dir": "/tmp/drill_hive_wh","hive.metastore.sasl.enabled": "false"}}}' http://localhost:8047/storage/hive.json
+  curl -X POST -H "Content-Type: application/json" -d '{"name":"hive", "config": {"type": "hive", "enabled": true,"configProps": {"hive.metastore.uris": "thrift://vagrant-99-00:9083","hive.metastore.warehouse.dir": "/tmp/drill_hive_wh","hive.metastore.sasl.enabled": "false"}}}' http://localhost:8047/storage/hive.json
 
 
   # Run the command and time it
@@ -201,7 +204,7 @@ get_drill_cmd() {
   drill_exports="$(get_drill_exports)"
 
   #currently hardcoded for the ZK that launches on main node
-  #TODO making it possible to change ZK address
+  #the zk is defined in the config file drill-override
   drill_cmd="$drill_exports\n$(get_local_apps_path)/${DRILL_VERSION}/bin/drill-conf "
   echo -e "$drill_cmd"
 }

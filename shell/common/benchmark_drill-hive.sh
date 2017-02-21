@@ -1,13 +1,13 @@
 # Benchmark based on Pavlo's benchmark and HiveBench hivebench implementation
 source_file "$ALOJA_REPO_PATH/shell/common/common_hive.sh"
 set_hive_requires
-source_file "$ALOJA_REPO_PATH/shell/common/common_drill_test.sh"
+source_file "$ALOJA_REPO_PATH/shell/common/common_drill.sh"
 set_drill_requires
 
 BENCH_REQUIRED_FILES["hivebench"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/hivebench.tar.gz"
 
 #BENCH_REQUIRED_FILES["tpch-hive"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/tpch-hive.tar.gz"
-[ ! "$BENCH_LIST" ] && BENCH_LIST="test"
+[ ! "$BENCH_LIST" ] && BENCH_LIST="datagen aggregation hiving"
 
 data_location="/hivebench/data"
 hivebench_pages="1200" #hivebench default 120000000
@@ -114,7 +114,7 @@ INSERT OVERWRITE TABLE uservisits_aggre SELECT sourceIP, SUM(adRevenue) FROM use
 benchmark_prepare_test(){
 
   # Copy hive-site.xml to hive conf folder (thrift server)
-  #cp $(get_base_configs_path)/hive1_conf_template/hive-site.xml $(get_local_apps_path)/apache-hive-1.2.1-bin/conf/
+  cp $(get_base_configs_path)/hive1_conf_template/hive-site.xml $(get_local_apps_path)/apache-hive-1.2.1-bin/conf/
   logger "INFO: Starting metastore server"
   #execute_cmd_master "$bench_name" "$(get_hive_exports) $HIVE_HOME/bin/hive --service hiveserver2 &&"
   logger "INFO: Executing with hive"
@@ -135,10 +135,18 @@ benchmark_test(){
   local bench_name="${FUNCNAME[0]##*benchmark_}"
   logger "INFO: Running $bench_name"
   start_drill
-  local show_databases="use sys;"
+  local show_databases="show databases;
+  select * from hive.uservisits limit 5;
+  "
   local local_file_path="$(create_local_file "$bench_name.sql" "$show_databases")"
-  #currently no sql file or sql statement, opens up drill shell to enter them manually
-  execute_drill "$bench_name" '-e "use sys;"' "time"
+  #currently no sql file or sql statement, opens up drill shell to enter them manually for testing purposes
+  execute_drill "$bench_name" "-f '$local_file_path'" "time"
 
 }
 
+benchmark_hiving() {
+  local bench_name="${FUNCNAME[0]##*benchmark_}"
+  logger "INFO: Running $bench_name"
+
+  execute_hive "$bench_name" '' "time"
+}
