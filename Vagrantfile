@@ -122,6 +122,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     #   d.has_ssh = true
     # end
 
+
     #used a fixed port, so that we can connect from the deploy scripts
     default.ssh.port = defaultSSHPort
     default.vm.network :forwarded_port, guest: 22, host: defaultSSHPort, id: 'ssh'
