@@ -163,9 +163,9 @@ execute_drill(){
   export JAVA_HOME="$(get_java_home)"
 
   # starting ZK outside causes ZK not to launch properly - drillbits don't manage to get a connection
-  start_zookeeper
-  logger "INFO: Wait 120 seconds to get server started..."
-  sleep 120
+  #start_zookeeper
+  #logger "INFO: Wait 120 seconds to get server started..."
+  #sleep 120
 
   # Checking the log files of all drillbits - used to debug
   #$DSH "cat $BENCH_DRILL_DIR/log/drillbit.out"
@@ -180,7 +180,7 @@ execute_drill(){
 
   #need to set hive plugin here, sometimes causes the benchmark not to finish
   #set_hive_plugin
-  curl -X POST -H "Content-Type: application/json" -d '{"name":"hive", "config": {"type": "hive", "enabled": true,"configProps": {"hive.metastore.uris": "thrift://vagrant-99-00:9083","hive.metastore.warehouse.dir": "/tmp/drill_hive_wh","hive.metastore.sasl.enabled": "false"}}}' http://localhost:8047/storage/hive.json
+  #curl -X POST -H "Content-Type: application/json" -d '{"name":"hive", "config": {"type": "hive", "enabled": true,"configProps": {"hive.metastore.uris": "thrift://vagrant-99-00:9083","hive.metastore.warehouse.dir": "/tmp/drill_hive_wh","hive.metastore.sasl.enabled": "false"}}}' http://localhost:8047/storage/hive.json
 
 
   # Run the command and time it
@@ -188,9 +188,9 @@ execute_drill(){
 
   # Stop metrics monitors and save bench (if needed)
   if [ "$time_exec" ] ; then
-    set_bench_end "$bench"
-    stop_monit
-    save_disk_usage "AFTER"
+    #set_bench_end "$bench"
+    #stop_monit
+    #save_disk_usage "AFTER"
     save_drill "$bench"
   fi
 }
@@ -211,9 +211,10 @@ get_drill_cmd() {
 
 # $1 bench name
 save_drill() {
+  local bench_name="$1"
   logger "WARNING: missing to implement a proper save_drill()"
-  stop_drill
-  save_zookeeper
+  #stop_drill
+  #save_zookeeper
   save_hadoop "$bench_name"
   }
 

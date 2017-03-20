@@ -7,7 +7,7 @@ set_drill_requires
 BENCH_REQUIRED_FILES["hivebench"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/hivebench.tar.gz"
 
 #BENCH_REQUIRED_FILES["tpch-hive"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/tpch-hive.tar.gz"
-[ ! "$BENCH_LIST" ] && BENCH_LIST="datagen aggregation test"
+[ ! "$BENCH_LIST" ] && BENCH_LIST="datagen aggregation test continue"
 
 data_location="/hivebench/data"
 hivebench_pages="1200" #hivebench default 120000000
@@ -125,20 +125,24 @@ benchmark_prepare_test(){
   eval $hive_cmd
   logger "INFO: Wait 120 seconds to get server started..."
   sleep 120
-
-
+  start_drill
+  start_zookeeper
+  logger "INFO: Wait 120 seconds to get zookeeper started..."
+  sleep 120
+  set_hive_plugin
 
 }
 
 benchmark_test(){
-
   local bench_name="${FUNCNAME[0]##*benchmark_}"
   logger "INFO: Running $bench_name"
-  start_drill
+  
   local show_databases="show databases;
   select * from hive.uservisits limit 5;
   "
   local local_file_path="$(create_local_file "$bench_name.sql" "$show_databases")"
-  #currently no sql file or sql statement, opens up drill shell to enter them manually for testing purposes
-  execute_drill "$bench_name" "" "time"
+  #simple test query to see if connection is established
+  execute_drill "$bench_name" "-f '$local_file_path'" "time"
 }
+
+

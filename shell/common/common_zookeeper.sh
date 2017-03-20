@@ -12,7 +12,7 @@ set_hadoop_requires
 set_zookeeper_requires() {
   [ ! "$ZOOKEEPER_VERSION" ] && die "No DRILL_VERSION specified"
 
-  BENCH_REQUIRED_FILES["$ZOOKEEPER_VERSION"]="http://mirror.serversupportforum.de/apache/zookeeper/$ZOOKEEPER_VERSION/$ZOOKEEPER_VERSION.tar.gz"
+  BENCH_REQUIRED_FILES["$ZOOKEEPER_VERSION"]="http://apache.lauf-forum.at/zookeeper/$ZOOKEEPER_VERSION/$ZOOKEEPER_VERSION.tar.gz"
 
   #also set the config here
   BENCH_CONFIG_FOLDERS="$BENCH_CONFIG_FOLDERS zookeeper_conf"
@@ -52,10 +52,13 @@ start_zookeeper(){
 
 }
 
+stop_zookeeper(){
+$(get_local_apps_path)/${ZOOKEEPER_VERSION}/bin/zkServer.sh stop
+}
 
 # $1 bench name
 save_zookeeper() {
   logger "WARNING: missing to implement a proper save_zookeeper()"
-  $(get_local_apps_path)/${ZOOKEEPER_VERSION}/bin/zkServer.sh stop
+  #$(get_local_apps_path)/${ZOOKEEPER_VERSION}/bin/zkServer.sh stop
   save_hadoop "$bench_name"
   }

@@ -10,7 +10,7 @@ source_file "$ALOJA_REPO_PATH/shell/common/common_hive.sh"
 set_hive_requires
 
 BENCH_REQUIRED_FILES["$TPCH_DIR"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/$TPCH_DIR.tar.gz"
-[ ! "$BENCH_LIST" ] && BENCH_LIST="$(seq -f "query%g" -s " " 1 22)"
+[ ! "$BENCH_LIST" ] && BENCH_LIST="$(seq -f "query%g" -s " " 1 2)"
 
 # Some benchmark specific validations
 [ ! "$TPCH_SCALE_FACTOR" ] && die "TPCH_SCALE_FACTOR is not set, cannot continue"
@@ -183,9 +183,6 @@ benchmark_prepare_drilling(){
   eval $hive_cmd
   logger "INFO: Wait 120 seconds to get server started..."
   sleep 120
-
-
-
 }
 
 benchmark_drilling(){
@@ -193,12 +190,16 @@ benchmark_drilling(){
   local bench_name="${FUNCNAME[0]##*benchmark_}"
   logger "INFO: Running $bench_name"
   start_drill
+  #local show_databases="use hive.tpch_bin_flat_orc_1;
+  #select * from nation limit 5;
+  #"
   local show_databases="show databases;
-  select * from hive.uservisits limit 5;
+  select * from hive.tpch_bin_flat_orc_1.nation limit 5;
   "
+  
   local local_file_path="$(create_local_file "$bench_name.sql" "$show_databases")"
   #currently no sql file or sql statement, opens up drill shell to enter them manually for testing purposes
-  execute_drill "$bench_name" "" "time"
+  execute_drill "$bench_name" "-f '$local_file_path'" "time"
 }
 
 #test for hive
@@ -217,6 +218,5 @@ benchmark_suite_cleanup() {
   kill -9 $(ps aux | grep '[S]erver2' | awk '{print $2}')
   #stops metastore
   kill -9 $(lsof -t -i:9083)
-
 
 }
