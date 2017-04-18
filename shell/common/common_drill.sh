@@ -3,10 +3,6 @@
 source_file "$ALOJA_REPO_PATH/shell/common/common_hadoop.sh"
 set_hadoop_requires
 
-# TODO getting to start ZK outside of drill
-source_file "$ALOJA_REPO_PATH/shell/common/common_zookeeper.sh"
-set_zookeeper_requires
-
 get_drill_config_folder() {
   local config_folder_name
 
