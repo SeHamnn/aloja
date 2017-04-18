@@ -5,6 +5,8 @@
 source_file "$ALOJA_REPO_PATH/shell/common/common_TPC-H.sh"
 source_file "$ALOJA_REPO_PATH/shell/common/common_drill.sh"
 set_drill_requires
+source_file "$ALOJA_REPO_PATH/shell/common/common_zookeeper.sh"
+set_zookeeper_requires
 
 
 benchmark_suite_run() {
