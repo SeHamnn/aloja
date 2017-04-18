@@ -10,7 +10,7 @@ set_zookeeper_requires
 get_drill_config_folder() {
   local config_folder_name
 
-  if [ "$HADOOP_CUSTOM_CONFIG" ] ; then
+  if [ "$DRILL_CUSTOM_CONFIG" ] ; then
     config_folder_name="$DRILL_CUSTOM_CONFIG"
   else
     config_folder_name="drill_1.6_conf_template"
