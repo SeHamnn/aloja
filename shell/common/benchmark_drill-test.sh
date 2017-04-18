@@ -1,6 +1,8 @@
 # Benchmark to test Hive installation and configurations
 source_file "$ALOJA_REPO_PATH/shell/common/common_drill.sh"
 set_drill_requires
+source_file "$ALOJA_REPO_PATH/shell/common/common_zookeeper.sh"
+set_zookeeper_requires
 
 #BENCH_REQUIRED_FILES["tpch-hive"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/tpch-hive.tar.gz"
 [ ! "$BENCH_LIST" ] && BENCH_LIST="drill-test drillm"
