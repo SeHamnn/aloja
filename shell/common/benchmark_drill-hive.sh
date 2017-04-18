@@ -3,6 +3,8 @@ source_file "$ALOJA_REPO_PATH/shell/common/common_hive.sh"
 set_hive_requires
 source_file "$ALOJA_REPO_PATH/shell/common/common_drill.sh"
 set_drill_requires
+source_file "$ALOJA_REPO_PATH/shell/common/common_zookeeper.sh"
+set_zookeeper_requires
 
 BENCH_REQUIRED_FILES["hivebench"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/hivebench.tar.gz"
 
