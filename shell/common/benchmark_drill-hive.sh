@@ -9,7 +9,7 @@ set_zookeeper_requires
 BENCH_REQUIRED_FILES["hivebench"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/hivebench.tar.gz"
 
 #BENCH_REQUIRED_FILES["tpch-hive"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/tpch-hive.tar.gz"
-[ ! "$BENCH_LIST" ] && BENCH_LIST="datagen aggregation test continue"
+[ ! "$BENCH_LIST" ] && BENCH_LIST="datagen aggregation test"
 
 data_location="/hivebench/data"
 hivebench_pages="1200" #hivebench default 120000000
