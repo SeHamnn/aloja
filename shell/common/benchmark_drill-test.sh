@@ -5,7 +5,7 @@ source_file "$ALOJA_REPO_PATH/shell/common/common_zookeeper.sh"
 set_zookeeper_requires
 
 #BENCH_REQUIRED_FILES["tpch-hive"]="$ALOJA_PUBLIC_HTTP/aplic2/tarballs/tpch-hive.tar.gz"
-[ ! "$BENCH_LIST" ] && BENCH_LIST="drill-test drillm"
+[ ! "$BENCH_LIST" ] && BENCH_LIST="drill-test"
 
 # Implement only the different functionality
 
@@ -38,14 +38,4 @@ benchmark_drill-test() {
   #simple test query to see if connection is established
   execute_drill "$bench_name" "-f '$local_file_path'" "time"
   
-}
-
-benchmark_drillm() {
-  local bench_name="${FUNCNAME[0]##*benchmark_}"
-  local show_databases="show databases;
-  "
-  local VARIABLE="test"
-  local local_file_path="$(create_local_file "$bench_name.sql" "$show_databases")"
-  #simple test query to see if connection is established
-  execute_drill "$bench_name" "-f '$local_file_path'" "time"
 }
