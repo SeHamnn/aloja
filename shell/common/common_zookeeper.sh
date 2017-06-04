@@ -35,11 +35,12 @@ export ZOOKEEPER_CONF_DIR=$(get_local_apps_path)/${ZOOKEEPER_VERSION}/conf;
 
 # start zookeeper
 start_zookeeper(){
+  $DSH "bash share/zk_id.sh"
   local zookeeper_exports
   local zk_home="$(get_local_apps_path)/${ZOOKEEPER_VERSION}"
   export PATH=$PATH:zk_home
   export JAVA_HOME="$(get_java_home)"
-
+  
 
 
   local exports="$(get_zookeeper_exports) $zookeeper_exports"
@@ -47,13 +48,15 @@ start_zookeeper(){
 
   #currently hardcoded for zookeeper config
   # TODO implement real way to implement ZK config
-  cp $(get_base_configs_path)/zookeeper_conf/zoo.cfg $zk_home/conf/zoo.cfg
-  $zk_home/bin/zkServer.sh restart
+  $DSH "cp $(get_base_configs_path)/zookeeper_conf/zoo.cfg $zk_home/conf/zoo.cfg"
+  $DSH "$HADOOP_EXPORTS $zk_home/bin/zkServer.sh restart
+
 
 }
 
 stop_zookeeper(){
-$(get_local_apps_path)/${ZOOKEEPER_VERSION}/bin/zkServer.sh stop
+$DSH "echo $JAVA_HOME"
+$DSH "$(get_local_apps_path)/${ZOOKEEPER_VERSION}/bin/zkServer.sh stop"
 }
 
 # $1 bench name
@@ -62,3 +65,14 @@ save_zookeeper() {
   #$(get_local_apps_path)/${ZOOKEEPER_VERSION}/bin/zkServer.sh stop
   save_hadoop "$bench_name"
   }
+  
+status_zookeeper(){
+ local zk_home="$(get_local_apps_path)/${ZOOKEEPER_VERSION}"
+ $DSH "$zk_home/bin/zkServer.sh status"
+
+}
+  
+  
+
+ 
+ }
